@@ -375,6 +375,49 @@
 
   .icon { width: 18px; height: 18px; flex-shrink: 0; }
   .icon-sm { width: 14px; height: 14px; }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(62,55,47,0.4);
+    display: flex; align-items: center; justify-content: center; z-index: 200;
+  }
+  .modal {
+    background: var(--greige-50); border-radius: var(--radius);
+    padding: 28px 32px; box-shadow: var(--shadow-lg);
+    min-width: 420px; max-width: 520px;
+  }
+  .modal h3 {
+    font-size: 17px; font-weight: 600; color: var(--greige-800); margin-bottom: 16px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .modal p { font-size: 13px; color: var(--greige-600); margin-bottom: 14px; line-height: 1.6; }
+  .modal input[type="password"], .modal input[type="text"] {
+    width: 100%; padding: 10px 14px; border: 1.5px solid var(--greige-300);
+    border-radius: var(--radius-sm); font-size: 14px; background: white;
+    color: var(--greige-900); transition: border-color 0.2s;
+  }
+  .modal input:focus { outline: none; border-color: var(--accent); }
+  .modal-actions {
+    display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;
+  }
+  .api-status {
+    font-size: 12px; margin-top: 8px; display: flex; align-items: center; gap: 6px;
+  }
+  .api-status .dot {
+    width: 8px; height: 8px; border-radius: 50%; display: inline-block;
+  }
+  .dot-green { background: var(--success); }
+  .dot-gray { background: var(--greige-400); }
+
+  /* AI button special style */
+  .btn-ai {
+    background: linear-gradient(135deg, #a0826d, #7a8fa0);
+    color: white; border: none;
+  }
+  .btn-ai:hover:not(:disabled) {
+    background: linear-gradient(135deg, #8b6e5a, #6a7f90);
+    box-shadow: var(--shadow-md);
+  }
 </style>
 </head>
 <body>
@@ -443,6 +486,16 @@
           回転
         </button>
       </div>
+      <div class="toolbar-sep"></div>
+      <div class="toolbar-group">
+        <button class="btn btn-sm btn-ai" id="btnAiSplit" disabled title="AIが書面の内容を読み取り自動で分割します">
+          <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 0 1 4 4c0 1.1-.9 2-2 2h-4a2 2 0 0 1-2-2 4 4 0 0 1 4-4z"/><path d="M8 8v8a4 4 0 0 0 8 0V8"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>
+          AI自動分割
+        </button>
+        <button class="btn btn-sm btn-outline" id="btnApiKey" title="APIキー設定">
+          <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+        </button>
+      </div>
       <span class="selection-info" id="selectionInfo"></span>
     </div>
 
@@ -466,6 +519,27 @@
     <div style="font-size:16px;font-weight:600;color:var(--greige-800);" id="progressTitle">処理中...</div>
     <div class="progress-bar-track"><div class="progress-bar-fill" id="progressBar" style="width:0%"></div></div>
     <div class="progress-text" id="progressText">準備中...</div>
+  </div>
+</div>
+
+<!-- API Key Modal -->
+<div class="modal-overlay hidden" id="apiKeyModal">
+  <div class="modal">
+    <h3>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+      Gemini APIキー設定
+    </h3>
+    <p>AI自動分割にはGoogleのGemini APIキーが必要です。キーはこのブラウザにのみ保存され、外部サーバーには送信されません。</p>
+    <p style="font-size:12px;color:var(--greige-500);">APIキーは <a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--accent);">Google AI Studio</a> で無料で取得できます。</p>
+    <input type="password" id="apiKeyInput" placeholder="AIza..." autocomplete="off">
+    <div class="api-status" id="apiKeyStatus">
+      <span class="dot dot-gray"></span>
+      <span>未設定</span>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-sm btn-secondary" id="btnApiKeyCancel">キャンセル</button>
+      <button class="btn btn-sm btn-primary" id="btnApiKeySave">保存</button>
+    </div>
   </div>
 </div>
 
@@ -1119,6 +1193,280 @@ function formatSize(bytes) {
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
+
+// ══════════════════════════════════════════════════════
+// ── AI Auto-Split (Claude Vision API) ──
+// ══════════════════════════════════════════════════════
+
+const btnAiSplit = document.getElementById('btnAiSplit');
+const btnApiKey = document.getElementById('btnApiKey');
+const apiKeyModal = document.getElementById('apiKeyModal');
+const apiKeyInput = document.getElementById('apiKeyInput');
+const apiKeyStatus = document.getElementById('apiKeyStatus');
+const btnApiKeySave = document.getElementById('btnApiKeySave');
+const btnApiKeyCancel = document.getElementById('btnApiKeyCancel');
+
+let geminiApiKey = '';
+
+// Load API key from localStorage on startup
+(function initApiKey() {
+  const saved = localStorage.getItem('pdf_organizer_gemini_key');
+  if (saved) {
+    geminiApiKey = saved;
+    updateApiKeyStatus(true);
+  }
+  updateAiButton();
+})();
+
+function updateApiKeyStatus(hasKey) {
+  if (hasKey) {
+    apiKeyStatus.innerHTML = '<span class="dot dot-green"></span><span>設定済み</span>';
+  } else {
+    apiKeyStatus.innerHTML = '<span class="dot dot-gray"></span><span>未設定</span>';
+  }
+}
+
+function updateAiButton() {
+  btnAiSplit.disabled = !(geminiApiKey && state.pages.length > 0);
+}
+
+// Update AI button when page grid changes
+const aiObserver = new MutationObserver(() => updateAiButton());
+aiObserver.observe(pageGrid, { childList: true, subtree: true });
+
+// ── API Key Modal ──
+btnApiKey.addEventListener('click', () => {
+  apiKeyInput.value = geminiApiKey;
+  apiKeyModal.classList.remove('hidden');
+  setTimeout(() => apiKeyInput.focus(), 100);
+});
+
+btnApiKeyCancel.addEventListener('click', () => {
+  apiKeyModal.classList.add('hidden');
+});
+
+apiKeyModal.addEventListener('click', (e) => {
+  if (e.target === apiKeyModal) apiKeyModal.classList.add('hidden');
+});
+
+btnApiKeySave.addEventListener('click', () => {
+  const key = apiKeyInput.value.trim();
+  if (key) {
+    geminiApiKey = key;
+    localStorage.setItem('pdf_organizer_gemini_key', key);
+    updateApiKeyStatus(true);
+    showToast('APIキーを保存しました');
+  } else {
+    geminiApiKey = '';
+    localStorage.removeItem('pdf_organizer_gemini_key');
+    updateApiKeyStatus(false);
+    showToast('APIキーを削除しました');
+  }
+  updateAiButton();
+  apiKeyModal.classList.add('hidden');
+});
+
+// Allow Enter key in modal
+apiKeyInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') btnApiKeySave.click();
+  if (e.key === 'Escape') btnApiKeyCancel.click();
+});
+
+// ── Render page to base64 at higher resolution ──
+async function renderPageToBase64(page, scale) {
+  const file = state.files.find(f => f.id === page.fileId);
+  if (!file) throw new Error(`File not found for page ${page.id}`);
+  const pdfPage = await file.pdfJs.getPage(page.filePageIndex + 1);
+  const viewport = pdfPage.getViewport({ scale: scale || 1.5, rotation: page.rotation });
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  const ctx = canvas.getContext('2d');
+  await pdfPage.render({ canvasContext: ctx, viewport }).promise;
+  return canvas.toDataURL('image/jpeg', 0.7).split(',')[1];
+}
+
+// ── AI Auto-Split Handler (Gemini API) ──
+btnAiSplit.addEventListener('click', async () => {
+  if (!geminiApiKey || state.pages.length === 0) return;
+  if (state.pages.length < 2) {
+    showToast('2ページ以上あるときにAI分割が利用できます');
+    return;
+  }
+
+  try {
+    showProgress('AIが書面を分析中...');
+
+    const pages = state.pages;
+    const totalPages = pages.length;
+
+    // Render all pages to base64 images (low res for AI analysis)
+    const pageImages = [];
+    for (let i = 0; i < totalPages; i++) {
+      updateProgress(Math.round((i / totalPages) * 40), `ページ ${i + 1}/${totalPages} を画像化中...`);
+      const b64 = await renderPageToBase64(pages[i], 0.5);
+      pageImages.push(b64);
+    }
+
+    // Split into batches of up to 15 pages each to keep request size manageable
+    const BATCH_SIZE = 15;
+    const numBatches = Math.ceil(totalPages / BATCH_SIZE);
+    const allSplitPoints = [1]; // page 1 always starts a document
+
+    for (let batch = 0; batch < numBatches; batch++) {
+      const batchStart = batch * BATCH_SIZE;
+      const batchEnd = Math.min(batchStart + BATCH_SIZE, totalPages);
+      const batchPages = pageImages.slice(batchStart, batchEnd);
+      const batchPageCount = batchPages.length;
+
+      const progressBase = 40 + Math.round((batch / numBatches) * 45);
+      updateProgress(progressBase, `Gemini APIに送信中... (${batch + 1}/${numBatches})`);
+
+      const prompt = `あなたはスキャンされた法律文書を分析するアシスタントです。
+以下に全${totalPages}ページ中のページ${batchStart + 1}〜${batchEnd}の画像を送ります。
+これらのページは複数の異なる書面（書類）がまとめてスキャンされたものです。
+
+各ページの内容を確認し、どこで新しい書面が始まっているかを判定してください。
+
+【判定のポイント】
+- 新しい書面のタイトルや表題がある（例：「訴状」「答弁書」「準備書面」「通知書」「契約書」「陳述書」等）
+- ページ番号がリセットされている
+- 書面のフォーマットや体裁が明らかに変わっている
+- 裁判所名や事件番号が変わっている
+- 差出人・宛先が変わっている
+- 「以上」で終わった後の次ページに新しい書面が始まっている
+
+【回答形式】
+以下のJSON形式のみで回答してください。余計な説明は不要です。
+{ "splits": [${batchStart + 1}, ...] }
+
+splitsは「新しい書面が始まるページ番号（全体の通しページ番号、1始まり）」の配列です。
+この範囲内（ページ${batchStart + 1}〜${batchEnd}）で新しい書面が始まるページのみを含めてください。
+新しい書面の開始が見つからない場合は空配列を返してください：{ "splits": [] }`;
+
+      // Build parts array
+      const parts = [{ text: prompt }];
+      for (let i = 0; i < batchPageCount; i++) {
+        parts.push({ text: `--- ページ ${batchStart + i + 1} ---` });
+        parts.push({
+          inline_data: {
+            mime_type: 'image/jpeg',
+            data: batchPages[i]
+          }
+        });
+      }
+
+      // Call Gemini API
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`;
+
+      let response;
+      try {
+        response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts }],
+            generationConfig: {
+              temperature: 0.1,
+              maxOutputTokens: 1024
+            }
+          })
+        });
+      } catch (fetchErr) {
+        throw new Error('APIへの接続に失敗しました。インターネット接続とAPIキーを確認してください。');
+      }
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        if (response.status === 400) {
+          const msg = errData.error?.message || '';
+          if (msg.includes('API_KEY') || msg.includes('API key')) {
+            throw new Error('APIキーが無効です。設定を確認してください。');
+          }
+          throw new Error(msg || 'リクエストエラーが発生しました。');
+        } else if (response.status === 403) {
+          throw new Error('APIキーが無効か、Gemini APIが有効化されていません。Google AI Studioで確認してください。');
+        } else if (response.status === 429) {
+          throw new Error('APIレート制限に達しました。しばらく待ってから再試行してください。');
+        } else {
+          throw new Error(errData.error?.message || `API Error: ${response.status}`);
+        }
+      }
+
+      const data = await response.json();
+
+      // Extract the text response from Gemini format
+      const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      const jsonMatch = responseText.match(/\{[\s\S]*"splits"[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          const result = JSON.parse(jsonMatch[0]);
+          if (Array.isArray(result.splits)) {
+            result.splits.forEach(s => {
+              if (s >= batchStart + 1 && s <= batchEnd && !allSplitPoints.includes(s)) {
+                allSplitPoints.push(s);
+              }
+            });
+          }
+        } catch (e) {
+          console.warn(`Batch ${batch + 1} parse error, skipping:`, e);
+        }
+      }
+
+      // Small delay between batches to avoid rate limits
+      if (batch < numBatches - 1) {
+        await new Promise(r => setTimeout(r, 500));
+      }
+    }
+
+    updateProgress(90, '分割結果を適用中...');
+
+    // Sort split points
+    const splitIndices = allSplitPoints
+      .map(s => s - 1)
+      .filter(s => s >= 0 && s < totalPages)
+      .sort((a, b) => a - b);
+
+    // Ensure first split starts at 0
+    if (splitIndices[0] !== 0) splitIndices.unshift(0);
+
+    // If only one group detected, inform user
+    if (splitIndices.length <= 1) {
+      hideProgress();
+      showToast('AIは全ページが1つの書面であると判定しました');
+      return;
+    }
+
+    // Apply splits to state
+    saveSnapshot();
+
+    // Flatten all current page IDs in order
+    const allPageIds = state.groups.flat();
+
+    // Create new groups based on split points
+    const newGroups = [];
+    for (let i = 0; i < splitIndices.length; i++) {
+      const start = splitIndices[i];
+      const end = i + 1 < splitIndices.length ? splitIndices[i + 1] : totalPages;
+      const groupPageIds = allPageIds.slice(start, end);
+      if (groupPageIds.length > 0) {
+        newGroups.push(groupPageIds);
+      }
+    }
+
+    state.groups = newGroups.length > 0 ? newGroups : [allPageIds];
+    state.selected.clear();
+    renderAll();
+
+    hideProgress();
+    showToast(`AIが ${newGroups.length} 件の書面を検出し、自動分割しました`);
+
+  } catch (err) {
+    hideProgress();
+    showToast('AI分割エラー: ' + err.message);
+    console.error('AI Split Error:', err);
+  }
+});
 </script>
 </body>
 </html>
