@@ -528,8 +528,8 @@
       <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 1 3 6.7"/><polyline points="3 22 3 16 9 16"/></svg>
       リセット
     </button>
-    <button class="btn btn-primary" id="btnExport" disabled title="PDFを出力">
-      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    <button class="btn btn-primary" id="btnExport" disabled title="保存先フォルダを選んでPDFを出力">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><polyline points="9 14 12 17 15 14"/></svg>
       PDF出力
     </button>
   </div>
@@ -1235,57 +1235,97 @@ function handleDrop(pageIds, targetGroupIndex, beforeIndex) {
 // ── Export ──
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+// Check if File System Access API is available
+const hasFSAccess = ('showDirectoryPicker' in window);
+
+async function generateAllPdfs() {
+  const generated = []; // { blob, fileName }
+  const validGroups = state.groups.filter(g => g.length > 0);
+
+  for (let i = 0; i < validGroups.length; i++) {
+    const group = validGroups[i];
+    updateProgress((i / validGroups.length) * 70, `ファイル ${i + 1} / ${validGroups.length} を生成中...`);
+    const newPdf = await PDFDocument.create();
+    for (let pi = 0; pi < group.length; pi++) {
+      const page = state.pages.find(p => p.id === group[pi]);
+      if (!page) continue;
+      const sourceFile = state.files.find(f => f.id === page.fileId);
+      if (!sourceFile) continue;
+      const [copiedPage] = await newPdf.copyPages(sourceFile.pdfDoc, [page.filePageIndex]);
+      if (page.rotation !== 0) {
+        copiedPage.setRotation(PDFLib.degrees(copiedPage.getRotation().angle + page.rotation));
+      }
+      newPdf.addPage(copiedPage);
+    }
+    const pdfBytes = await newPdf.save();
+    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const groupIdx = state.groups.indexOf(group);
+    const baseName = state.groupNames[groupIdx]
+      || (validGroups.length > 1 ? `output_${i + 1}` : 'output');
+    const fileName = baseName.endsWith('.pdf') ? baseName : baseName + '.pdf';
+    generated.push({ blob, fileName });
+  }
+  return generated;
+}
+
+async function saveToFolder(generated) {
+  // Use File System Access API to pick a folder and save directly
+  const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+  updateProgress(80, 'フォルダに保存中...');
+
+  for (let i = 0; i < generated.length; i++) {
+    const { blob, fileName } = generated[i];
+    updateProgress(80 + (i / generated.length) * 18, `保存中: ${fileName}`);
+    const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+  }
+  return dirHandle.name;
+}
+
+async function downloadFallback(generated) {
+  updateProgress(80, 'ダウンロード中...');
+  for (let i = 0; i < generated.length; i++) {
+    const { blob, fileName } = generated[i];
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    await delay(600);
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }
+}
+
 btnExport.addEventListener('click', async () => {
   if (state.pages.length === 0) return;
   showProgress('PDFを生成中...');
   try {
-    // Step 1: Generate all PDFs first
-    const generated = []; // { blob, fileName }
-    const validGroups = state.groups.filter(g => g.length > 0);
+    const generated = await generateAllPdfs();
 
-    for (let i = 0; i < validGroups.length; i++) {
-      const group = validGroups[i];
-      updateProgress((i / validGroups.length) * 80, `ファイル ${i + 1} / ${validGroups.length} を生成中...`);
-      const newPdf = await PDFDocument.create();
-      for (let pi = 0; pi < group.length; pi++) {
-        const page = state.pages.find(p => p.id === group[pi]);
-        if (!page) continue;
-        const sourceFile = state.files.find(f => f.id === page.fileId);
-        if (!sourceFile) continue;
-        const [copiedPage] = await newPdf.copyPages(sourceFile.pdfDoc, [page.filePageIndex]);
-        if (page.rotation !== 0) {
-          copiedPage.setRotation(PDFLib.degrees(copiedPage.getRotation().angle + page.rotation));
+    if (hasFSAccess) {
+      try {
+        const folderName = await saveToFolder(generated);
+        hideProgress();
+        showToast(`${generated.length}件のPDFを「${folderName}」に保存しました`);
+        return;
+      } catch (fsErr) {
+        // User cancelled folder picker or permission denied → fall back to download
+        if (fsErr.name === 'AbortError') {
+          hideProgress();
+          showToast('出力をキャンセルしました');
+          return;
         }
-        newPdf.addPage(copiedPage);
+        console.warn('Folder save failed, falling back to download:', fsErr);
       }
-      const pdfBytes = await newPdf.save();
-      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-      // Use AI-suggested name or group name, fallback to output_N
-      const groupIdx = state.groups.indexOf(group);
-      const baseName = state.groupNames[groupIdx]
-        || (validGroups.length > 1 ? `output_${i + 1}` : 'output');
-      const fileName = baseName.endsWith('.pdf') ? baseName : baseName + '.pdf';
-      generated.push({ blob, fileName });
     }
 
-    // Step 2: Download all, with a delay between each to avoid browser blocking
-    updateProgress(90, 'ダウンロード中...');
-    for (let i = 0; i < generated.length; i++) {
-      const { blob, fileName } = generated[i];
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileName;
-      a.style.display = 'none';
-      document.body.appendChild(a);
-      a.click();
-      // Wait before next download and before cleanup
-      await delay(600);
-      document.body.removeChild(a);
-      // Revoke after generous delay
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
-    }
-
+    // Fallback: traditional download
+    await downloadFallback(generated);
     hideProgress();
     showToast(`${generated.length}件のPDFを出力しました！`);
   } catch (err) {
