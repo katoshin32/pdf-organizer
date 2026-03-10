@@ -791,7 +791,7 @@ fileInput.addEventListener('change', (e) => { handleFiles(e.target.files); fileI
 dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('drag-over'); });
 dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
 dropzone.addEventListener('drop', (e) => {
-  e.preventDefault(); dropzone.classList.remove('drag-over');
+  e.preventDefault(); e.stopPropagation(); dropzone.classList.remove('drag-over');
   const files = [...e.dataTransfer.files].filter(f => f.type === 'application/pdf');
   if (files.length) handleFiles(files);
 });
@@ -799,7 +799,7 @@ dropzone.addEventListener('drop', (e) => {
 canvasArea.addEventListener('dragover', (e) => { e.preventDefault(); });
 canvasArea.addEventListener('drop', (e) => {
   e.preventDefault();
-  if (e.target.closest('.page-card')) return;
+  if (e.target.closest('.page-card') || e.target.closest('.drop-indicator')) return;
   const files = [...(e.dataTransfer.files || [])].filter(f => f.type === 'application/pdf');
   if (files.length) handleFiles(files);
 });
@@ -1546,14 +1546,15 @@ btnAiSplit.addEventListener('click', async () => {
     const pageImages = [];
     for (let i = 0; i < totalPages; i++) {
       updateProgress(Math.round((i / totalPages) * 40), `ページ ${i + 1}/${totalPages} を画像化中...`);
-      const b64 = await renderPageToBase64(pages[i], 0.5);
+      const b64 = await renderPageToBase64(pages[i], 0.75);
       pageImages.push(b64);
     }
 
-    // Split into batches of up to 15 pages each to keep request size manageable
-    const BATCH_SIZE = 15;
+    // Split into batches to keep request size manageable
+    const BATCH_SIZE = 10;
     const numBatches = Math.ceil(totalPages / BATCH_SIZE);
-    const allDocuments = []; // { page, date, type, author }
+    const allDocuments = []; // { page, date, type, author, rotation }
+    const allRotations = []; // { page, rotation } for individual page corrections
 
     for (let batch = 0; batch < numBatches; batch++) {
       const batchStart = batch * BATCH_SIZE;
@@ -1564,41 +1565,70 @@ btnAiSplit.addEventListener('click', async () => {
       const progressBase = 40 + Math.round((batch / numBatches) * 45);
       updateProgress(progressBase, `Gemini APIに送信中... (${batch + 1}/${numBatches})`);
 
-      const prompt = `あなたはスキャンされた法律文書を分析するアシスタントです。
+      const prompt = `あなたはスキャンされた法律文書を高精度に分析するアシスタントです。
 以下に全${totalPages}ページ中のページ${batchStart + 1}〜${batchEnd}の画像を送ります。
 これらのページは複数の異なる書面（書類）がまとめてスキャンされたものです。
 
-各ページの内容を確認し、どこで新しい書面が始まっているかを判定してください。
-また、各書面について「証拠番号」「作成日付」「文書の種類」「作成者名」を読み取ってください。
+■ タスク1：書面の分割判定
+各ページの内容を注意深く確認し、どこで新しい書面が始まっているかを判定してください。
 
-【判定のポイント】
-- 新しい書面のタイトルや表題がある（例：「訴状」「答弁書」「準備書面」「通知書」「契約書」「陳述書」等）
-- ページ番号がリセットされている
-- 書面のフォーマットや体裁が明らかに変わっている
-- 裁判所名や事件番号が変わっている
-- 差出人・宛先が変わっている
-- 「以上」で終わった後の次ページに新しい書面が始まっている
+【新しい書面の開始と判定すべきポイント（重要度順）】
+1. 表題・タイトルがある（「訴状」「答弁書」「準備書面」「通知書」「契約書」「陳述書」「証拠説明書」「売買契約書」等）
+2. 「甲第○号証」「乙第○号証」の証拠ラベルが付いた書類の先頭ページ
+3. 書面のフォーマットや体裁が明らかに変わっている（例：法律文書→写真→Webページ印刷物）
+4. ページ番号が1にリセットされている、または新たに振り直されている
+5. 差出人・宛先・裁判所名・事件番号が変わっている
+6. 前のページが「以上」で終わっていて、次ページに新しい内容が始まっている
+7. 前のページと内容が明らかに無関係（例：契約書の後に写真が来る）
+
+【新しい書面ではないと判定すべきケース】
+- 同じ書面の続きのページ（ページ番号が連続している）
+- 同じ書面内の添付資料や別紙
+- 表と裏のページ
+
+■ タスク2：各書面の情報を読み取る
+各書面について以下の情報を読み取ってください。
+
+■ タスク3：ページの向きを判定する
+各ページの画像を見て、テキストや写真が正しい向きで表示されているかを判定してください。
+横向きや上下逆のページがあれば、正位置にするために必要な回転角度を返してください。
 
 【回答形式】
 以下のJSON形式のみで回答してください。余計な説明は不要です。
 
 {
   "documents": [
-    { "page": ${batchStart + 1}, "evidence": "甲1", "date": "20260310", "type": "売買契約書", "author": "" },
-    { "page": 5, "evidence": "甲2の1", "date": "20260315", "type": "領収書", "author": "" },
-    { "page": 8, "evidence": "", "date": "20260401", "type": "準備書面(1)", "author": "被告次郎" }
+    { "page": ${batchStart + 1}, "evidence": "甲1", "date": "20260310", "type": "売買契約書", "author": "", "rotation": 0 },
+    { "page": 5, "evidence": "", "date": "", "type": "写真（自動車）", "author": "", "rotation": 0 },
+    { "page": 8, "evidence": "", "date": "", "type": "Webページ（セカンドストリート）", "author": "", "rotation": 0 }
+  ],
+  "pageRotations": [
+    { "page": 3, "rotation": 90 },
+    { "page": 7, "rotation": 180 }
   ]
 }
 
-各フィールドの説明：
+■ documentsフィールドの説明：
 - page: 新しい書面が始まるページ番号（全体の通しページ番号、1始まり）
-- evidence: 証拠番号。甲号証なら"甲1"、"甲2の1"等。乙号証なら"乙1"、"乙2の1"等。証拠でない書面は空文字""。書面に「甲第○号証」「乙第○号証」等の記載がないか注意して確認すること
-- date: 書面に記載されている作成日付（西暦YYYYMMDD形式）。和暦で書かれている場合は西暦に変換すること（令和8年=2026年、令和7年=2025年、令和6年=2024年...平成31年/令和元年=2019年）。不明なら空文字""
-- type: 書面の種類（訴状、答弁書、準備書面(1)、陳述書、証拠説明書、売買契約書、領収書、等）
-- author: 書面の作成者名（弁護士名、当事者名等）。不明なら空文字""
+- evidence: 証拠番号。「甲第○号証」「乙第○号証」等の記載がある場合→"甲1"、"甲2の1"、"乙3"等。証拠でなければ空文字""
+- date: 書面の作成日付（西暦YYYYMMDD形式）。和暦の場合は西暦に変換（令和8年=2026年、令和7年=2025年、令和6年=2024年...平成31年/令和元年=2019年）。不明なら空文字""
+- type: 書面の種類を以下のルールで判定する
+  ・通常の文書→具体的な種類名（訴状、答弁書、準備書面(1)、陳述書、証拠説明書、売買契約書、登記事項証明書、等）
+  ・文字のない写真やイラストが主体のページ→「写真（被写体の説明）」（例：写真（自動車）、写真（建物外観）、写真（損傷箇所）等）
+  ・Webサイトを印刷したページ（URL、ブラウザのヘッダ/フッタ、Webレイアウトが見える場合）→「Webページ（サイト名やページの内容）」（例：Webページ（セカンドストリート）、Webページ（Amazon商品ページ）等）
+  ・地図→「地図（場所名）」
+  ・メールを印刷したもの→「メール（差出人名 or 件名）」
+- author: 作成者名（弁護士名、当事者名等）。不明なら空文字""
+- rotation: この書面の先頭ページの回転角度（下記pageRotationsと同じ）。正位置なら0
 
-この範囲内（ページ${batchStart + 1}〜${batchEnd}）で新しい書面が始まるページのみを含めてください。
-新しい書面の開始が見つからない場合は空配列を返してください：{ "documents": [] }`;
+■ pageRotationsフィールドの説明：
+この範囲内で正位置でないページがあれば、正位置にするために必要な時計回りの回転角度を返す。
+- page: ページ番号（通しページ番号、1始まり）
+- rotation: 0=正位置、90=右に90度回転が必要、180=上下逆、270=左に90度回転が必要
+すべて正位置の場合は空配列[]でよい。
+
+この範囲内（ページ${batchStart + 1}〜${batchEnd}）で新しい書面が始まるページのみをdocumentsに含めてください。
+新しい書面の開始が見つからない場合は空配列を返してください：{ "documents": [], "pageRotations": [] }`;
 
       // Build parts array
       const parts = [{ text: prompt }];
@@ -1624,7 +1654,7 @@ btnAiSplit.addEventListener('click', async () => {
             contents: [{ parts }],
             generationConfig: {
               temperature: 0.1,
-              maxOutputTokens: 1024
+              maxOutputTokens: 2048
             }
           })
         });
@@ -1666,8 +1696,18 @@ btnAiSplit.addEventListener('click', async () => {
                   evidence: doc.evidence || '',
                   date: (doc.date || '').replace(/[^0-9]/g, ''),
                   type: doc.type || '',
-                  author: doc.author || ''
+                  author: doc.author || '',
+                  rotation: doc.rotation || 0
                 });
+              }
+            });
+          }
+          // Collect page rotations
+          if (Array.isArray(result.pageRotations)) {
+            result.pageRotations.forEach(pr => {
+              const pg = pr.page;
+              if (pg >= batchStart + 1 && pg <= batchEnd && !allRotations.some(r => r.page === pg)) {
+                allRotations.push({ page: pg, rotation: pr.rotation || 0 });
               }
             });
           }
@@ -1728,11 +1768,26 @@ btnAiSplit.addEventListener('click', async () => {
 
     state.groups = newGroups.length > 0 ? newGroups : [allPageIds];
     state.groupNames = newGroups.length > 0 ? newNames : [''];
+
+    // Apply page rotations detected by AI
+    let rotatedCount = 0;
+    allRotations.forEach(pr => {
+      const pageIdx = pr.page - 1; // 0-based
+      if (pageIdx >= 0 && pageIdx < allPageIds.length && pr.rotation) {
+        const page = state.pages.find(p => p.id === allPageIds[pageIdx]);
+        if (page) {
+          page.rotation = ((page.rotation || 0) + pr.rotation) % 360;
+          rotatedCount++;
+        }
+      }
+    });
+
     state.selected.clear();
     renderAll();
 
     hideProgress();
-    showToast(`AIが ${newGroups.length} 件の書面を検出し、自動分割しました`);
+    const rotMsg = rotatedCount > 0 ? `（${rotatedCount}ページを自動回転）` : '';
+    showToast(`AIが ${newGroups.length} 件の書面を検出し、自動分割しました${rotMsg}`);
 
   } catch (err) {
     hideProgress();
@@ -1769,26 +1824,33 @@ async function aiRenameGroup(groupIndex, btnEl) {
     for (const pageId of pagesToAnalyze) {
       const page = state.pages.find(p => p.id === pageId);
       if (page) {
-        const b64 = await renderPageToBase64(page, 0.5);
+        const b64 = await renderPageToBase64(page, 0.75);
         images.push(b64);
       }
     }
 
-    const prompt = `以下はスキャンされた法律文書の1つの書面です（${group.length}ページ中の代表ページを送ります）。
+    const prompt = `以下はスキャンされた書類の1つの書面です（${group.length}ページ中の代表ページを送ります）。
 この書面の情報を読み取り、以下のJSON形式で回答してください。
 
 {
   "evidence": "甲1",
   "date": "20260310",
   "type": "売買契約書",
-  "author": "原告太郎"
+  "author": "原告太郎",
+  "rotation": 0
 }
 
 各フィールド：
 - evidence: 証拠番号。「甲第○号証」「乙第○号証」等の記載があれば"甲1"、"甲2の1"、"乙3"等。証拠でなければ空文字""
-- date: 書面の作成日付（西暦YYYYMMDD形式）。和暦の場合は西暦に変換（令和8年=2026年、令和7年=2025年、令和6年=2024年...平成31年/令和元年=2019年）。不明なら空文字""
-- type: 書面の種類（訴状、答弁書、準備書面(1)、陳述書、証拠説明書、売買契約書、登記事項証明書、等）
+- date: 書面の作成日付（西暦YYYYMMDD形式）。和暦→西暦変換（令和8年=2026年、令和7年=2025年、令和6年=2024年...平成31年/令和元年=2019年）。不明なら空文字""
+- type: 書面の種類。以下のルールで判定：
+  ・通常の法律文書→具体的な種類名（訴状、答弁書、準備書面(1)、陳述書、証拠説明書、売買契約書、登記事項証明書、等）
+  ・文字のない写真やイラストが主体→「写真（被写体の説明）」（例：写真（自動車）、写真（建物外観）、写真（損傷箇所）等）
+  ・Webサイトの印刷物（URL、ブラウザUI、Webレイアウトが見える場合）→「Webページ（サイト名や内容）」（例：Webページ（セカンドストリート）等）
+  ・地図→「地図（場所名）」
+  ・メール印刷物→「メール（差出人 or 件名）」
 - author: 作成者名（弁護士名、当事者名等）。不明なら空文字""
+- rotation: 先頭ページの画像が正位置でなければ、正位置にするための時計回りの回転角度（0, 90, 180, 270）。正位置なら0
 
 JSONのみ回答してください。`;
 
@@ -1829,14 +1891,30 @@ JSONのみ回答してください。`;
     const nameParts = [evidence, date, type, author].filter(Boolean);
     const newName = nameParts.length > 0 ? nameParts.join('_') : '';
 
+    // Apply rotation if detected
+    let rotMsg = '';
+    if (doc.rotation && doc.rotation !== 0) {
+      const rot = doc.rotation;
+      group.forEach(pageId => {
+        const page = state.pages.find(p => p.id === pageId);
+        if (page) page.rotation = ((page.rotation || 0) + rot) % 360;
+      });
+      rotMsg = `（${rot}°回転適用）`;
+    }
+
     if (newName) {
       state.groupNames[groupIndex] = newName;
-      // Update the input field directly without full re-render
-      const input = document.querySelector(`.group-name-input[data-group-index="${groupIndex}"]`);
-      if (input) input.value = newName;
-      showToast(`命名: ${newName}`);
+      // Update the input field directly, then re-render to show rotation
+      if (rotMsg) {
+        renderAll();
+      } else {
+        const input = document.querySelector(`.group-name-input[data-group-index="${groupIndex}"]`);
+        if (input) input.value = newName;
+      }
+      showToast(`命名: ${newName}${rotMsg}`);
     } else {
-      showToast('書面情報を読み取れませんでした');
+      if (rotMsg) renderAll();
+      showToast('書面情報を読み取れませんでした' + rotMsg);
     }
 
   } catch (err) {
