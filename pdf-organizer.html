@@ -418,6 +418,31 @@
     background: linear-gradient(135deg, #8b6e5a, #6a7f90);
     box-shadow: var(--shadow-md);
   }
+
+  /* Editable group name input */
+  .group-name-input {
+    border: 1px solid transparent;
+    background: transparent;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--greige-800);
+    padding: 2px 6px;
+    border-radius: 4px;
+    min-width: 120px;
+    max-width: 400px;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .group-name-input:hover {
+    border-color: var(--greige-300);
+    background: rgba(255,255,255,0.5);
+  }
+  .group-name-input:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: white;
+    box-shadow: 0 0 0 2px rgba(160,130,109,0.15);
+  }
 </style>
 </head>
 <body>
@@ -554,6 +579,7 @@ const state = {
   files: [],
   pages: [],
   groups: [[]],
+  groupNames: [],   // AI suggested file names per group (e.g. "20260310_訴状_原告太郎")
   selected: new Set(),
   dragData: null,
 };
@@ -570,6 +596,7 @@ function saveSnapshot() {
   undoStack.push({
     pages: state.pages.map(p => ({ ...p })),
     groups: state.groups.map(g => [...g]),
+    groupNames: [...state.groupNames],
     selected: new Set(state.selected),
   });
   if (undoStack.length > MAX_UNDO) undoStack.shift();
@@ -581,6 +608,7 @@ function undo() {
   const snap = undoStack.pop();
   state.pages = snap.pages;
   state.groups = snap.groups;
+  state.groupNames = snap.groupNames || [];
   state.selected = snap.selected;
   // Restore file list to match pages
   const usedFileIds = new Set(state.pages.map(p => p.fileId));
@@ -679,8 +707,17 @@ async function loadPDF(file) {
 }
 
 function rebuildGroups() {
-  state.groups = state.groups.filter(g => g.length > 0);
-  if (state.groups.length === 0) state.groups = [[]];
+  // Keep groupNames in sync: remove names for empty groups
+  const newGroups = [];
+  const newNames = [];
+  state.groups.forEach((g, i) => {
+    if (g.length > 0) {
+      newGroups.push(g);
+      newNames.push(state.groupNames[i] || '');
+    }
+  });
+  state.groups = newGroups.length > 0 ? newGroups : [[]];
+  state.groupNames = newGroups.length > 0 ? newNames : [''];
 }
 
 // ── Rendering ──
@@ -731,14 +768,15 @@ function renderPageGrid() {
 
   let html = '';
   state.groups.forEach((group, gi) => {
-    const groupTitle = state.groups.length > 1 ? `出力ファイル ${gi + 1}` : '出力ファイル';
+    const aiName = state.groupNames[gi] || '';
+    const groupTitle = aiName || (state.groups.length > 1 ? `出力ファイル ${gi + 1}` : '出力ファイル');
     const colors = GROUP_COLORS[gi % GROUP_COLORS.length];
 
     html += `<div class="doc-group" data-group-index="${gi}" style="--group-bg:${colors.bg};--group-accent:${colors.accent}">`;
     html += `<div class="doc-group-header">
       <div class="doc-group-title">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-        ${groupTitle}
+        <input type="text" class="group-name-input" data-group-index="${gi}" value="${groupTitle.replace(/"/g, '&quot;')}" title="ファイル名を編集（拡張子不要）" spellcheck="false">
         <span class="doc-group-badge" style="background:${colors.badge}">${group.length}ページ</span>
       </div>
     </div>`;
@@ -795,6 +833,16 @@ function renderPageGrid() {
   // Setup interactions
   setupSplitGutters();
   setupPageDragDrop();
+
+  // Group name editing
+  document.querySelectorAll('.group-name-input').forEach(input => {
+    input.addEventListener('change', (e) => {
+      const gi = parseInt(e.target.dataset.groupIndex);
+      state.groupNames[gi] = e.target.value.trim();
+    });
+    // Select all on focus for easy editing
+    input.addEventListener('focus', (e) => e.target.select());
+  });
 }
 
 async function renderThumb(pageId) {
@@ -838,7 +886,9 @@ function splitGroupAt(groupIndex, splitAt) {
   saveSnapshot();
   const before = group.slice(0, splitAt);
   const after = group.slice(splitAt);
+  const oldName = state.groupNames[groupIndex] || '';
   state.groups.splice(groupIndex, 1, before, after);
+  state.groupNames.splice(groupIndex, 1, oldName, '');
   rebuildGroups();
   renderAll();
   showToast('分割しました');
@@ -1134,7 +1184,11 @@ btnExport.addEventListener('click', async () => {
       }
       const pdfBytes = await newPdf.save();
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-      const fileName = validGroups.length > 1 ? `output_${i + 1}.pdf` : 'output.pdf';
+      // Use AI-suggested name or group name, fallback to output_N
+      const groupIdx = state.groups.indexOf(group);
+      const baseName = state.groupNames[groupIdx]
+        || (validGroups.length > 1 ? `output_${i + 1}` : 'output');
+      const fileName = baseName.endsWith('.pdf') ? baseName : baseName + '.pdf';
       generated.push({ blob, fileName });
     }
 
@@ -1311,7 +1365,7 @@ btnAiSplit.addEventListener('click', async () => {
     // Split into batches of up to 15 pages each to keep request size manageable
     const BATCH_SIZE = 15;
     const numBatches = Math.ceil(totalPages / BATCH_SIZE);
-    const allSplitPoints = [1]; // page 1 always starts a document
+    const allDocuments = []; // { page, date, type, author }
 
     for (let batch = 0; batch < numBatches; batch++) {
       const batchStart = batch * BATCH_SIZE;
@@ -1327,6 +1381,7 @@ btnAiSplit.addEventListener('click', async () => {
 これらのページは複数の異なる書面（書類）がまとめてスキャンされたものです。
 
 各ページの内容を確認し、どこで新しい書面が始まっているかを判定してください。
+また、各書面について「作成日付」「文書の種類」「作成者名」を読み取ってください。
 
 【判定のポイント】
 - 新しい書面のタイトルや表題がある（例：「訴状」「答弁書」「準備書面」「通知書」「契約書」「陳述書」等）
@@ -1338,11 +1393,21 @@ btnAiSplit.addEventListener('click', async () => {
 
 【回答形式】
 以下のJSON形式のみで回答してください。余計な説明は不要です。
-{ "splits": [${batchStart + 1}, ...] }
 
-splitsは「新しい書面が始まるページ番号（全体の通しページ番号、1始まり）」の配列です。
+{
+  "documents": [
+    { "page": ${batchStart + 1}, "date": "20260310", "type": "訴状", "author": "原告太郎" },
+    { "page": 5, "date": "20260315", "type": "答弁書", "author": "被告次郎" }
+  ]
+}
+
+- page: 新しい書面が始まるページ番号（全体の通しページ番号、1始まり）
+- date: 書面に記載されている日付（YYYYMMDD形式）。不明なら空文字""
+- type: 書面の種類（訴状、答弁書、準備書面(1)、陳述書、証拠説明書、等）
+- author: 書面の作成者名（弁護士名、当事者名等）。不明なら空文字""
+
 この範囲内（ページ${batchStart + 1}〜${batchEnd}）で新しい書面が始まるページのみを含めてください。
-新しい書面の開始が見つからない場合は空配列を返してください：{ "splits": [] }`;
+新しい書面の開始が見つからない場合は空配列を返してください：{ "documents": [] }`;
 
       // Build parts array
       const parts = [{ text: prompt }];
@@ -1397,14 +1462,20 @@ splitsは「新しい書面が始まるページ番号（全体の通しペー�
 
       // Extract the text response from Gemini format
       const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      const jsonMatch = responseText.match(/\{[\s\S]*"splits"[\s\S]*\}/);
+      const jsonMatch = responseText.match(/\{[\s\S]*"documents"[\s\S]*\}/);
       if (jsonMatch) {
         try {
           const result = JSON.parse(jsonMatch[0]);
-          if (Array.isArray(result.splits)) {
-            result.splits.forEach(s => {
-              if (s >= batchStart + 1 && s <= batchEnd && !allSplitPoints.includes(s)) {
-                allSplitPoints.push(s);
+          if (Array.isArray(result.documents)) {
+            result.documents.forEach(doc => {
+              const pg = doc.page;
+              if (pg >= batchStart + 1 && pg <= batchEnd && !allDocuments.some(d => d.page === pg)) {
+                allDocuments.push({
+                  page: pg,
+                  date: (doc.date || '').replace(/[^0-9]/g, ''),
+                  type: doc.type || '',
+                  author: doc.author || ''
+                });
               }
             });
           }
@@ -1421,14 +1492,18 @@ splitsは「新しい書面が始まるページ番号（全体の通しペー�
 
     updateProgress(90, '分割結果を適用中...');
 
-    // Sort split points
-    const splitIndices = allSplitPoints
-      .map(s => s - 1)
-      .filter(s => s >= 0 && s < totalPages)
-      .sort((a, b) => a - b);
+    // Sort documents by page number
+    allDocuments.sort((a, b) => a.page - b.page);
 
-    // Ensure first split starts at 0
-    if (splitIndices[0] !== 0) splitIndices.unshift(0);
+    // Ensure page 1 is included
+    if (allDocuments.length === 0 || allDocuments[0].page !== 1) {
+      allDocuments.unshift({ page: 1, date: '', type: '', author: '' });
+    }
+
+    // Convert to 0-based indices
+    const splitIndices = allDocuments
+      .map(d => d.page - 1)
+      .filter(s => s >= 0 && s < totalPages);
 
     // If only one group detected, inform user
     if (splitIndices.length <= 1) {
@@ -1443,18 +1518,24 @@ splitsは「新しい書面が始まるページ番号（全体の通しペー�
     // Flatten all current page IDs in order
     const allPageIds = state.groups.flat();
 
-    // Create new groups based on split points
+    // Create new groups and names based on split points
     const newGroups = [];
+    const newNames = [];
     for (let i = 0; i < splitIndices.length; i++) {
       const start = splitIndices[i];
       const end = i + 1 < splitIndices.length ? splitIndices[i + 1] : totalPages;
       const groupPageIds = allPageIds.slice(start, end);
       if (groupPageIds.length > 0) {
         newGroups.push(groupPageIds);
+        // Build file name: 日付_種類_作成者
+        const doc = allDocuments[i];
+        const parts = [doc.date, doc.type, doc.author].filter(Boolean);
+        newNames.push(parts.length > 0 ? parts.join('_') : '');
       }
     }
 
     state.groups = newGroups.length > 0 ? newGroups : [allPageIds];
+    state.groupNames = newGroups.length > 0 ? newNames : [''];
     state.selected.clear();
     renderAll();
 
