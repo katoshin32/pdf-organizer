@@ -1,0 +1,1124 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF Organizer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<style>
+  :root {
+    --greige-50: #faf8f5;
+    --greige-100: #f3efe9;
+    --greige-200: #e8e1d8;
+    --greige-300: #d4cabb;
+    --greige-400: #b8aa96;
+    --greige-500: #9d8d78;
+    --greige-600: #857563;
+    --greige-700: #6b5e50;
+    --greige-800: #574d43;
+    --greige-900: #3e372f;
+    --accent: #a0826d;
+    --accent-hover: #8b6e5a;
+    --accent-light: #c9a892;
+    --danger: #c47a6a;
+    --danger-hover: #b0665a;
+    --success: #7a9e7e;
+    --info: #7a8fa0;
+    --shadow-sm: 0 1px 3px rgba(62,55,47,0.08);
+    --shadow-md: 0 4px 12px rgba(62,55,47,0.10);
+    --shadow-lg: 0 8px 24px rgba(62,55,47,0.12);
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+    background: var(--greige-100);
+    color: var(--greige-900);
+    min-height: 100vh;
+  }
+
+  /* Header */
+  .header {
+    background: var(--greige-50);
+    border-bottom: 1px solid var(--greige-200);
+    padding: 16px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: var(--shadow-sm);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .header-left { display: flex; align-items: center; gap: 12px; }
+  .logo {
+    width: 36px; height: 36px;
+    background: var(--accent);
+    border-radius: var(--radius-sm);
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-weight: 700; font-size: 16px;
+  }
+  .app-title { font-size: 20px; font-weight: 600; color: var(--greige-800); letter-spacing: 0.5px; }
+  .header-actions { display: flex; gap: 10px; align-items: center; }
+
+  /* Buttons */
+  .btn {
+    padding: 10px 20px; border: none; border-radius: var(--radius-sm);
+    font-size: 14px; font-weight: 500; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 8px;
+    transition: all 0.2s; letter-spacing: 0.3px;
+  }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover:not(:disabled) { background: var(--accent-hover); box-shadow: var(--shadow-md); }
+  .btn-secondary { background: var(--greige-200); color: var(--greige-800); }
+  .btn-secondary:hover:not(:disabled) { background: var(--greige-300); }
+  .btn-danger { background: var(--danger); color: white; }
+  .btn-danger:hover:not(:disabled) { background: var(--danger-hover); }
+  .btn-outline { background: transparent; border: 1.5px solid var(--greige-300); color: var(--greige-700); }
+  .btn-outline:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); background: rgba(160,130,109,0.05); }
+  .btn-sm { padding: 6px 12px; font-size: 12px; }
+  .btn-icon {
+    width: 36px; height: 36px; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: var(--radius-sm); background: var(--greige-200);
+    color: var(--greige-700); border: none; cursor: pointer; transition: all 0.2s;
+  }
+  .btn-icon:hover { background: var(--greige-300); color: var(--greige-800); }
+
+  /* Main Layout */
+  .main { display: flex; height: calc(100vh - 69px); }
+
+  /* Sidebar */
+  .sidebar {
+    width: 280px; background: var(--greige-50);
+    border-right: 1px solid var(--greige-200);
+    display: flex; flex-direction: column; flex-shrink: 0;
+  }
+  .sidebar-header {
+    padding: 16px; border-bottom: 1px solid var(--greige-200);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .sidebar-title { font-size: 14px; font-weight: 600; color: var(--greige-700); }
+  .sidebar-body { flex: 1; overflow-y: auto; padding: 12px; }
+  .file-item {
+    padding: 10px 12px; border-radius: var(--radius-sm); cursor: pointer;
+    display: flex; align-items: center; gap: 10px;
+    transition: all 0.15s; margin-bottom: 4px; font-size: 13px; color: var(--greige-700);
+  }
+  .file-item:hover { background: var(--greige-200); }
+  .file-icon {
+    width: 32px; height: 32px; background: var(--greige-200);
+    border-radius: 6px; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; font-size: 14px; color: var(--accent);
+  }
+  .file-info { overflow: hidden; }
+  .file-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .file-meta { font-size: 11px; color: var(--greige-400); margin-top: 2px; }
+  .file-remove { margin-left: auto; opacity: 0; transition: opacity 0.15s; flex-shrink: 0; }
+  .file-item:hover .file-remove { opacity: 1; }
+
+  /* Workspace */
+  .workspace { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* Toolbar */
+  .toolbar {
+    padding: 12px 24px; background: var(--greige-50);
+    border-bottom: 1px solid var(--greige-200);
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .toolbar-group { display: flex; align-items: center; gap: 6px; }
+  .toolbar-sep { width: 1px; height: 24px; background: var(--greige-300); margin: 0 8px; }
+  .selection-info { font-size: 13px; color: var(--greige-500); margin-left: auto; }
+
+  /* Canvas area */
+  .canvas-area { flex: 1; overflow-y: auto; padding: 24px; }
+
+  /* Drop zone */
+  .dropzone {
+    border: 2.5px dashed var(--greige-300); border-radius: var(--radius);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 400px; height: 100%; transition: all 0.3s; cursor: pointer;
+    background: rgba(250,248,245,0.6);
+  }
+  .dropzone:hover, .dropzone.drag-over { border-color: var(--accent); background: rgba(160,130,109,0.04); }
+  .dropzone-icon {
+    width: 80px; height: 80px; background: var(--greige-200);
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    margin-bottom: 20px; font-size: 36px; color: var(--accent);
+  }
+  .dropzone-text { font-size: 18px; color: var(--greige-600); font-weight: 500; margin-bottom: 8px; }
+  .dropzone-hint { font-size: 13px; color: var(--greige-400); }
+
+  /* Page Grid */
+  .page-grid {
+    display: flex; flex-wrap: wrap; gap: 0;
+    align-content: flex-start; min-height: 100%;
+  }
+
+  /* Page Card */
+  .page-card {
+    width: 160px; background: var(--greige-50); border-radius: var(--radius);
+    box-shadow: var(--shadow-sm); border: 2px solid transparent;
+    transition: box-shadow 0.2s, border-color 0.2s;
+    cursor: grab; position: relative; user-select: none; overflow: hidden;
+  }
+  .page-card:hover { box-shadow: var(--shadow-md); }
+  .page-card.selected {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(160,130,109,0.2);
+  }
+  .page-card.dragging { opacity: 0.4; transform: scale(0.95); }
+  .page-thumb {
+    width: 100%; aspect-ratio: 210 / 297; background: white;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden; position: relative;
+  }
+  .page-thumb canvas { width: 100%; height: 100%; object-fit: contain; }
+  .page-thumb .loading { color: var(--greige-400); font-size: 12px; }
+  .page-label {
+    padding: 8px 10px; text-align: center; font-size: 12px;
+    color: var(--greige-600); background: var(--greige-50);
+    border-top: 1px solid var(--greige-200);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .page-source {
+    font-size: 10px; color: var(--greige-400);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80px;
+  }
+  .page-number { font-weight: 600; color: var(--greige-700); }
+  .page-check {
+    position: absolute; top: 8px; left: 8px; width: 24px; height: 24px;
+    background: white; border: 2px solid var(--greige-300); border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; z-index: 5; transition: all 0.15s; opacity: 0;
+  }
+  .page-card:hover .page-check, .page-card.selected .page-check { opacity: 1; }
+  .page-card.selected .page-check { background: var(--accent); border-color: var(--accent); color: white; }
+
+  /* ====== Split Gutter (between pages) ====== */
+  .split-gutter {
+    width: 20px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    cursor: default;
+    align-self: stretch;
+  }
+  /* The hover hit area - invisible but larger */
+  .split-gutter .split-hit {
+    position: absolute;
+    inset: 8px -4px;
+    z-index: 3;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  /* The cut line + scissor icon - hidden by default */
+  .split-gutter .split-visual {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    width: 100%;
+    opacity: 0;
+    transition: opacity 0.2s;
+    pointer-events: none;
+    position: relative;
+  }
+  .split-gutter:hover .split-visual {
+    opacity: 1;
+  }
+  .split-gutter .split-line-top,
+  .split-gutter .split-line-bottom {
+    width: 2px;
+    flex: 1;
+    background: var(--danger);
+    border-radius: 1px;
+  }
+  .split-gutter .split-line-top {
+    background: repeating-linear-gradient(
+      to bottom,
+      var(--danger) 0px, var(--danger) 4px,
+      transparent 4px, transparent 8px
+    );
+  }
+  .split-gutter .split-line-bottom {
+    background: repeating-linear-gradient(
+      to bottom,
+      var(--danger) 0px, var(--danger) 4px,
+      transparent 4px, transparent 8px
+    );
+  }
+  .split-gutter .split-scissor {
+    width: 28px; height: 28px;
+    background: var(--danger);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: white;
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(196,122,106,0.4);
+    transition: transform 0.15s, background 0.15s;
+  }
+  .split-gutter:hover .split-scissor {
+    transform: scale(1.1);
+  }
+  .split-gutter:active .split-scissor {
+    background: var(--danger-hover);
+    transform: scale(0.95);
+  }
+  /* Already-split gutter (red line always visible) */
+  .split-gutter.is-split .split-visual {
+    opacity: 1;
+  }
+
+  /* ====== Drop Indicator (for drag & drop) ====== */
+  .drop-indicator {
+    width: 4px;
+    align-self: stretch;
+    background: var(--accent);
+    border-radius: 2px;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity 0.15s;
+    pointer-events: none;
+    box-shadow: 0 0 8px rgba(160,130,109,0.5);
+    margin: 0 -2px;
+    z-index: 10;
+    position: relative;
+  }
+  .drop-indicator::before,
+  .drop-indicator::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 12px; height: 12px;
+    background: var(--accent);
+    border-radius: 50%;
+  }
+  .drop-indicator::before { top: 4px; }
+  .drop-indicator::after { bottom: 4px; }
+  .drop-indicator.active {
+    opacity: 1;
+    width: 5px;
+  }
+
+  /* Document Group — color varies per group */
+  .doc-group {
+    border: 1.5px solid var(--greige-200); border-radius: var(--radius);
+    padding: 16px; margin-bottom: 16px;
+    background: var(--group-bg, rgba(250,248,245,0.8));
+    border-left: 4px solid var(--group-accent, var(--greige-300));
+  }
+  .doc-group-header {
+    display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;
+  }
+  .doc-group-title {
+    font-size: 14px; font-weight: 600; color: var(--greige-700);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .doc-group-badge {
+    background: var(--greige-200); padding: 2px 8px; border-radius: 10px;
+    font-size: 11px; font-weight: 500; color: var(--greige-600);
+  }
+  .doc-group-pages {
+    display: flex; flex-wrap: wrap; gap: 0;
+    align-items: stretch;
+    min-height: 60px;
+    padding: 4px 0;
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 24px; right: 24px;
+    background: var(--greige-900); color: white;
+    padding: 14px 20px; border-radius: var(--radius-sm); font-size: 14px;
+    box-shadow: var(--shadow-lg); z-index: 1000;
+    animation: slideIn 0.3s ease;
+    display: flex; align-items: center; gap: 10px;
+  }
+  @keyframes slideIn {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+
+  /* Progress */
+  .progress-overlay {
+    position: fixed; inset: 0; background: rgba(62,55,47,0.4);
+    display: flex; align-items: center; justify-content: center; z-index: 200;
+  }
+  .progress-card {
+    background: var(--greige-50); border-radius: var(--radius);
+    padding: 32px 40px; box-shadow: var(--shadow-lg);
+    text-align: center; min-width: 300px;
+  }
+  .progress-bar-track {
+    width: 100%; height: 6px; background: var(--greige-200);
+    border-radius: 3px; margin-top: 16px; overflow: hidden;
+  }
+  .progress-bar-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.3s; }
+  .progress-text { margin-top: 12px; font-size: 13px; color: var(--greige-500); }
+
+  .hidden { display: none !important; }
+
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--greige-300); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--greige-400); }
+
+  .icon { width: 18px; height: 18px; flex-shrink: 0; }
+  .icon-sm { width: 14px; height: 14px; }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-left">
+    <div class="logo">P</div>
+    <span class="app-title">PDF Organizer</span>
+  </div>
+  <div class="header-actions">
+    <button class="btn btn-outline" id="btnUndo" disabled title="元に戻す (Ctrl+Z)">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+      元に戻す
+    </button>
+    <button class="btn btn-outline" id="btnAddFiles" title="PDFを追加">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14m-7-7h14"/></svg>
+      PDF追加
+    </button>
+    <button class="btn btn-secondary" id="btnReset" title="すべてリセット">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 1 3 6.7"/><polyline points="3 22 3 16 9 16"/></svg>
+      リセット
+    </button>
+    <button class="btn btn-primary" id="btnExport" disabled title="PDFを出力">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      PDF出力
+    </button>
+  </div>
+</div>
+
+<!-- Main -->
+<div class="main">
+  <!-- Sidebar -->
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <span class="sidebar-title">読み込み済みファイル</span>
+    </div>
+    <div class="sidebar-body" id="fileList">
+      <div style="padding:20px;text-align:center;color:var(--greige-400);font-size:13px;">まだファイルがありません</div>
+    </div>
+  </div>
+
+  <!-- Workspace -->
+  <div class="workspace">
+    <!-- Toolbar -->
+    <div class="toolbar hidden" id="toolbar">
+      <div class="toolbar-group">
+        <button class="btn btn-sm btn-secondary" id="btnSelectAll" title="全選択">全選択</button>
+        <button class="btn btn-sm btn-secondary" id="btnDeselectAll" title="選択解除">選択解除</button>
+      </div>
+      <div class="toolbar-sep"></div>
+      <div class="toolbar-group">
+        <button class="btn btn-sm btn-outline" id="btnMergeGroups" disabled title="選択グループを結合">
+          <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 8 20 12 16 16"/><polyline points="8 8 4 12 8 16"/><line x1="4" y1="12" x2="20" y2="12"/></svg>
+          結合
+        </button>
+        <button class="btn btn-sm btn-danger" id="btnDeleteSelected" disabled title="選択ページを削除">
+          <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+          削除
+        </button>
+      </div>
+      <div class="toolbar-sep"></div>
+      <div class="toolbar-group">
+        <button class="btn btn-sm btn-outline" id="btnRotateCW" disabled title="右に90°回転">
+          <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6"/><path d="M21 8A9 9 0 1 0 6.7 3"/></svg>
+          回転
+        </button>
+      </div>
+      <span class="selection-info" id="selectionInfo"></span>
+    </div>
+
+    <!-- Canvas -->
+    <div class="canvas-area" id="canvasArea">
+      <div class="dropzone" id="dropzone">
+        <div class="dropzone-icon">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+        </div>
+        <div class="dropzone-text">PDFファイルをここにドロップ</div>
+        <div class="dropzone-hint">またはクリックしてファイルを選択（複数可）</div>
+      </div>
+      <div class="page-grid hidden" id="pageGrid"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Progress Overlay -->
+<div class="progress-overlay hidden" id="progressOverlay">
+  <div class="progress-card">
+    <div style="font-size:16px;font-weight:600;color:var(--greige-800);" id="progressTitle">処理中...</div>
+    <div class="progress-bar-track"><div class="progress-bar-fill" id="progressBar" style="width:0%"></div></div>
+    <div class="progress-text" id="progressText">準備中...</div>
+  </div>
+</div>
+
+<input type="file" id="fileInput" accept=".pdf" multiple style="display:none">
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const { PDFDocument } = PDFLib;
+
+// ── State ──
+const state = {
+  files: [],
+  pages: [],
+  groups: [[]],
+  selected: new Set(),
+  dragData: null,
+};
+let fileIdCounter = 0;
+let pageIdCounter = 0;
+
+// ── Undo History ──
+// Stores snapshots of { pages (shallow copies), groups (deep copy), selected }
+// files are never removed by undo (pages just reference them)
+const undoStack = [];
+const MAX_UNDO = 40;
+
+function saveSnapshot() {
+  undoStack.push({
+    pages: state.pages.map(p => ({ ...p })),
+    groups: state.groups.map(g => [...g]),
+    selected: new Set(state.selected),
+  });
+  if (undoStack.length > MAX_UNDO) undoStack.shift();
+  updateUndoButton();
+}
+
+function undo() {
+  if (undoStack.length === 0) return;
+  const snap = undoStack.pop();
+  state.pages = snap.pages;
+  state.groups = snap.groups;
+  state.selected = snap.selected;
+  // Restore file list to match pages
+  const usedFileIds = new Set(state.pages.map(p => p.fileId));
+  state.files = state.files.filter(f => usedFileIds.has(f.id));
+  rebuildGroups();
+  renderAll();
+  updateUndoButton();
+  showToast('元に戻しました');
+}
+
+function updateUndoButton() {
+  const btn = document.getElementById('btnUndo');
+  if (btn) btn.disabled = undoStack.length === 0;
+}
+
+// ── Elements ──
+const dropzone = document.getElementById('dropzone');
+const pageGrid = document.getElementById('pageGrid');
+const toolbar = document.getElementById('toolbar');
+const fileInput = document.getElementById('fileInput');
+const fileList = document.getElementById('fileList');
+const canvasArea = document.getElementById('canvasArea');
+const btnExport = document.getElementById('btnExport');
+const btnUndo = document.getElementById('btnUndo');
+const btnAddFiles = document.getElementById('btnAddFiles');
+const btnReset = document.getElementById('btnReset');
+const btnSelectAll = document.getElementById('btnSelectAll');
+const btnDeselectAll = document.getElementById('btnDeselectAll');
+const btnMergeGroups = document.getElementById('btnMergeGroups');
+const btnDeleteSelected = document.getElementById('btnDeleteSelected');
+const btnRotateCW = document.getElementById('btnRotateCW');
+const selectionInfo = document.getElementById('selectionInfo');
+
+// ── Scissor SVG (for split gutter) ──
+const SCISSOR_SVG = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>`;
+
+// ── File handling ──
+dropzone.addEventListener('click', () => fileInput.click());
+btnUndo.addEventListener('click', undo);
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+    e.preventDefault();
+    undo();
+  }
+});
+btnAddFiles.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', (e) => { handleFiles(e.target.files); fileInput.value = ''; });
+
+dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('drag-over'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+dropzone.addEventListener('drop', (e) => {
+  e.preventDefault(); dropzone.classList.remove('drag-over');
+  const files = [...e.dataTransfer.files].filter(f => f.type === 'application/pdf');
+  if (files.length) handleFiles(files);
+});
+
+canvasArea.addEventListener('dragover', (e) => { e.preventDefault(); });
+canvasArea.addEventListener('drop', (e) => {
+  e.preventDefault();
+  if (e.target.closest('.page-card')) return;
+  const files = [...(e.dataTransfer.files || [])].filter(f => f.type === 'application/pdf');
+  if (files.length) handleFiles(files);
+});
+
+async function handleFiles(fileListInput) {
+  showProgress('PDFを読み込み中...');
+  const files = [...fileListInput];
+  for (let i = 0; i < files.length; i++) {
+    updateProgress((i / files.length) * 100, `${files[i].name} を読み込み中...`);
+    await loadPDF(files[i]);
+  }
+  hideProgress();
+  rebuildGroups();
+  renderAll();
+}
+
+async function loadPDF(file) {
+  const arrayBuffer = await file.arrayBuffer();
+  const uint8 = new Uint8Array(arrayBuffer);
+  const pdfLibDoc = await PDFDocument.load(uint8, { ignoreEncryption: true });
+  const pdfJsDoc = await pdfjsLib.getDocument({ data: uint8.slice() }).promise;
+  const fileId = ++fileIdCounter;
+  const pageCount = pdfLibDoc.getPageCount();
+  state.files.push({ id: fileId, name: file.name, size: file.size, pdfDoc: pdfLibDoc, pdfJs: pdfJsDoc, pageCount });
+  const newPageIds = [];
+  for (let i = 0; i < pageCount; i++) {
+    const pageId = ++pageIdCounter;
+    state.pages.push({ id: pageId, fileId, filePageIndex: i, rotation: 0, thumbCanvas: null });
+    newPageIds.push(pageId);
+  }
+  if (state.groups.length === 1 && state.groups[0].length === 0) {
+    state.groups[0] = newPageIds;
+  } else {
+    state.groups.push(newPageIds);
+  }
+}
+
+function rebuildGroups() {
+  state.groups = state.groups.filter(g => g.length > 0);
+  if (state.groups.length === 0) state.groups = [[]];
+}
+
+// ── Rendering ──
+function renderAll() {
+  renderFileList();
+  renderPageGrid();
+  updateToolbar();
+  updateUndoButton();
+  const hasPages = state.pages.length > 0;
+  dropzone.classList.toggle('hidden', hasPages);
+  pageGrid.classList.toggle('hidden', !hasPages);
+  toolbar.classList.toggle('hidden', !hasPages);
+  btnExport.disabled = !hasPages;
+}
+
+function renderFileList() {
+  if (state.files.length === 0) {
+    fileList.innerHTML = '<div style="padding:20px;text-align:center;color:var(--greige-400);font-size:13px;">まだファイルがありません</div>';
+    return;
+  }
+  fileList.innerHTML = state.files.map(f => `
+    <div class="file-item" data-file-id="${f.id}" title="${f.name}">
+      <div class="file-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+      <div class="file-info">
+        <div class="file-name">${f.name}</div>
+        <div class="file-meta">${f.pageCount}ページ ・ ${formatSize(f.size)}</div>
+      </div>
+      <button class="btn-icon file-remove" onclick="removeFile(${f.id})" title="削除" style="width:28px;height:28px;font-size:14px;">×</button>
+    </div>
+  `).join('');
+}
+
+function renderPageGrid() {
+  if (state.groups.length === 0 || (state.groups.length === 1 && state.groups[0].length === 0)) {
+    pageGrid.innerHTML = '';
+    return;
+  }
+
+  // Warm palette for group colors (bg, accent, badge-bg)
+  const GROUP_COLORS = [
+    { bg: 'rgba(250,248,245,0.85)', accent: '#b8aa96', badge: '#e8e1d8' },
+    { bg: 'rgba(245,240,232,0.85)', accent: '#a0826d', badge: '#e4d5c9' },
+    { bg: 'rgba(240,245,240,0.85)', accent: '#7a9e7e', badge: '#d2e4d4' },
+    { bg: 'rgba(240,243,248,0.85)', accent: '#7a8fa0', badge: '#d0dbe6' },
+    { bg: 'rgba(248,242,245,0.85)', accent: '#b08a9a', badge: '#e4d4dc' },
+    { bg: 'rgba(248,246,238,0.85)', accent: '#a09060', badge: '#e4dcc8' },
+  ];
+
+  let html = '';
+  state.groups.forEach((group, gi) => {
+    const groupTitle = state.groups.length > 1 ? `出力ファイル ${gi + 1}` : '出力ファイル';
+    const colors = GROUP_COLORS[gi % GROUP_COLORS.length];
+
+    html += `<div class="doc-group" data-group-index="${gi}" style="--group-bg:${colors.bg};--group-accent:${colors.accent}">`;
+    html += `<div class="doc-group-header">
+      <div class="doc-group-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        ${groupTitle}
+        <span class="doc-group-badge" style="background:${colors.badge}">${group.length}ページ</span>
+      </div>
+    </div>`;
+    html += `<div class="doc-group-pages" data-group-index="${gi}">`;
+
+    group.forEach((pageId, pi) => {
+      const page = state.pages.find(p => p.id === pageId);
+      if (!page) return;
+      const file = state.files.find(f => f.id === page.fileId);
+      const isSelected = state.selected.has(pageId);
+
+      // ── Drop indicator BEFORE this card ──
+      html += `<div class="drop-indicator" data-drop-group="${gi}" data-drop-before="${pi}"></div>`;
+
+      // ── Split gutter (between pages, not before the first) ──
+      if (pi > 0) {
+        html += `<div class="split-gutter" data-split-group="${gi}" data-split-at="${pi}">
+          <div class="split-hit">
+            <div class="split-visual">
+              <div class="split-line-top"></div>
+              <div class="split-scissor">${SCISSOR_SVG}</div>
+              <div class="split-line-bottom"></div>
+            </div>
+          </div>
+        </div>`;
+      }
+
+      // ── Page card ──
+      html += `<div class="page-card ${isSelected ? 'selected' : ''}"
+                    data-page-id="${pageId}" data-group-index="${gi}" data-page-index="${pi}"
+                    draggable="true">
+        <div class="page-check" onclick="event.stopPropagation(); toggleSelect(${pageId})">
+          ${isSelected ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
+        </div>
+        <div class="page-thumb" id="thumb-${pageId}"><span class="loading">読込中...</span></div>
+        <div class="page-label">
+          <span class="page-source" title="${file ? file.name : ''}">${file ? file.name : ''}</span>
+          <span class="page-number">p.${page.filePageIndex + 1}</span>
+        </div>
+      </div>`;
+    });
+
+    // ── Drop indicator AFTER last card ──
+    html += `<div class="drop-indicator" data-drop-group="${gi}" data-drop-before="${group.length}"></div>`;
+
+    html += `</div></div>`;
+  });
+
+  pageGrid.innerHTML = html;
+
+  // Render thumbnails
+  state.groups.forEach(group => { group.forEach(pageId => renderThumb(pageId)); });
+
+  // Setup interactions
+  setupSplitGutters();
+  setupPageDragDrop();
+}
+
+async function renderThumb(pageId) {
+  const page = state.pages.find(p => p.id === pageId);
+  if (!page) return;
+  const file = state.files.find(f => f.id === page.fileId);
+  if (!file) return;
+  const container = document.getElementById(`thumb-${pageId}`);
+  if (!container) return;
+  try {
+    const pdfPage = await file.pdfJs.getPage(page.filePageIndex + 1);
+    const viewport = pdfPage.getViewport({ scale: 0.5, rotation: page.rotation });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    await pdfPage.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    container.innerHTML = '';
+    container.appendChild(canvas);
+    page.thumbCanvas = canvas;
+  } catch (e) {
+    container.innerHTML = '<span class="loading" style="color:var(--danger)">エラー</span>';
+  }
+}
+
+// ── Split Gutters ──
+function setupSplitGutters() {
+  document.querySelectorAll('.split-gutter .split-hit').forEach(hit => {
+    hit.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const gutter = hit.closest('.split-gutter');
+      const gi = parseInt(gutter.dataset.splitGroup);
+      const splitAt = parseInt(gutter.dataset.splitAt);
+      splitGroupAt(gi, splitAt);
+    });
+  });
+}
+
+function splitGroupAt(groupIndex, splitAt) {
+  const group = state.groups[groupIndex];
+  if (!group || splitAt <= 0 || splitAt >= group.length) return;
+  saveSnapshot();
+  const before = group.slice(0, splitAt);
+  const after = group.slice(splitAt);
+  state.groups.splice(groupIndex, 1, before, after);
+  rebuildGroups();
+  renderAll();
+  showToast('分割しました');
+}
+
+// ── Selection ──
+function toggleSelect(pageId) {
+  if (state.selected.has(pageId)) state.selected.delete(pageId);
+  else state.selected.add(pageId);
+  renderAll();
+}
+function selectAll() { state.pages.forEach(p => state.selected.add(p.id)); renderAll(); }
+function deselectAll() { state.selected.clear(); renderAll(); }
+
+document.addEventListener('click', (e) => {
+  const card = e.target.closest('.page-card');
+  if (card && !e.target.closest('.page-check')) {
+    const pageId = parseInt(card.dataset.pageId);
+    if (e.ctrlKey || e.metaKey) {
+      toggleSelect(pageId);
+    } else if (e.shiftKey) {
+      const allPageIds = state.groups.flat();
+      const lastSelected = [...state.selected].pop();
+      if (lastSelected !== undefined) {
+        const fromIdx = allPageIds.indexOf(lastSelected);
+        const toIdx = allPageIds.indexOf(pageId);
+        const [start, end] = fromIdx < toIdx ? [fromIdx, toIdx] : [toIdx, fromIdx];
+        for (let i = start; i <= end; i++) state.selected.add(allPageIds[i]);
+      } else {
+        state.selected.add(pageId);
+      }
+      renderAll();
+    } else {
+      state.selected.clear();
+      state.selected.add(pageId);
+      renderAll();
+    }
+  }
+});
+
+// ── Toolbar ──
+function updateToolbar() {
+  const count = state.selected.size;
+  btnDeleteSelected.disabled = count === 0;
+  btnRotateCW.disabled = count === 0;
+  const selectedGroups = new Set();
+  state.selected.forEach(pid => {
+    state.groups.forEach((g, gi) => { if (g.includes(pid)) selectedGroups.add(gi); });
+  });
+  btnMergeGroups.disabled = selectedGroups.size < 2;
+  selectionInfo.textContent = count > 0 ? `${count}ページ選択中` : `全${state.pages.length}ページ`;
+}
+
+btnSelectAll.addEventListener('click', selectAll);
+btnDeselectAll.addEventListener('click', deselectAll);
+
+btnMergeGroups.addEventListener('click', () => {
+  const selectedGroupIndices = new Set();
+  state.selected.forEach(pid => {
+    state.groups.forEach((g, gi) => { if (g.includes(pid)) selectedGroupIndices.add(gi); });
+  });
+  if (selectedGroupIndices.size < 2) return;
+  saveSnapshot();
+  const sortedIndices = [...selectedGroupIndices].sort((a, b) => a - b);
+  const merged = [];
+  sortedIndices.forEach(gi => { merged.push(...state.groups[gi]); });
+  const newGroups = [];
+  let mergedInserted = false;
+  state.groups.forEach((g, gi) => {
+    if (selectedGroupIndices.has(gi)) {
+      if (!mergedInserted) { newGroups.push(merged); mergedInserted = true; }
+    } else { newGroups.push(g); }
+  });
+  state.groups = newGroups;
+  state.selected.clear();
+  rebuildGroups();
+  renderAll();
+  showToast('結合しました');
+});
+
+btnDeleteSelected.addEventListener('click', () => {
+  if (state.selected.size === 0) return;
+  saveSnapshot();
+  state.groups = state.groups.map(g => g.filter(pid => !state.selected.has(pid)));
+  state.pages = state.pages.filter(p => !state.selected.has(p.id));
+  state.selected.clear();
+  rebuildGroups();
+  const usedFileIds = new Set(state.pages.map(p => p.fileId));
+  state.files = state.files.filter(f => usedFileIds.has(f.id));
+  renderAll();
+  showToast('削除しました');
+});
+
+btnRotateCW.addEventListener('click', () => {
+  saveSnapshot();
+  state.selected.forEach(pid => {
+    const page = state.pages.find(p => p.id === pid);
+    if (page) page.rotation = (page.rotation + 90) % 360;
+  });
+  state.selected.forEach(pid => renderThumb(pid));
+  showToast('回転しました');
+});
+
+btnReset.addEventListener('click', () => {
+  if (state.pages.length === 0) return;
+  if (!confirm('すべてのページとファイルをリセットしますか？')) return;
+  saveSnapshot();
+  state.files = []; state.pages = []; state.groups = [[]]; state.selected.clear();
+  renderAll();
+  showToast('リセットしました');
+});
+
+function removeFile(fileId) {
+  saveSnapshot();
+  const pagesToRemove = new Set(state.pages.filter(p => p.fileId === fileId).map(p => p.id));
+  state.pages = state.pages.filter(p => p.fileId !== fileId);
+  state.files = state.files.filter(f => f.id !== fileId);
+  state.groups = state.groups.map(g => g.filter(pid => !pagesToRemove.has(pid)));
+  pagesToRemove.forEach(pid => state.selected.delete(pid));
+  rebuildGroups();
+  renderAll();
+  showToast('ファイルを削除しました');
+}
+
+// ── Drag & Drop with visual drop indicators ──
+function setupPageDragDrop() {
+  const cards = document.querySelectorAll('.page-card');
+  const dropIndicators = document.querySelectorAll('.drop-indicator');
+
+  cards.forEach(card => {
+    card.addEventListener('dragstart', (e) => {
+      const pageId = parseInt(card.dataset.pageId);
+      let dragIds;
+      if (state.selected.has(pageId)) {
+        // Drag all selected, preserving order
+        const allFlat = state.groups.flat();
+        dragIds = allFlat.filter(pid => state.selected.has(pid));
+      } else {
+        dragIds = [pageId];
+      }
+      state.dragData = { pageIds: dragIds };
+      card.classList.add('dragging');
+      // Also dim other selected cards if dragging selection
+      if (state.selected.has(pageId)) {
+        document.querySelectorAll('.page-card.selected').forEach(c => c.classList.add('dragging'));
+      }
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', '');
+    });
+
+    card.addEventListener('dragend', () => {
+      document.querySelectorAll('.page-card.dragging').forEach(c => c.classList.remove('dragging'));
+      clearAllDropIndicators();
+      state.dragData = null;
+    });
+  });
+
+  // Each drop indicator listens for dragover/drop
+  dropIndicators.forEach(indicator => {
+    indicator.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      if (!state.dragData) return;
+      clearAllDropIndicators();
+      indicator.classList.add('active');
+    });
+    indicator.addEventListener('dragleave', () => {
+      indicator.classList.remove('active');
+    });
+    indicator.addEventListener('drop', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!state.dragData) return;
+      const gi = parseInt(indicator.dataset.dropGroup);
+      const beforeIdx = parseInt(indicator.dataset.dropBefore);
+      handleDrop(state.dragData.pageIds, gi, beforeIdx);
+      clearAllDropIndicators();
+      state.dragData = null;
+    });
+  });
+
+  // Page cards also detect dragover to activate the nearest indicator
+  cards.forEach(card => {
+    card.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      if (!state.dragData) return;
+      const rect = card.getBoundingClientRect();
+      const midX = rect.left + rect.width / 2;
+      const gi = parseInt(card.dataset.groupIndex);
+      const pi = parseInt(card.dataset.pageIndex);
+      const targetIdx = e.clientX < midX ? pi : pi + 1;
+
+      clearAllDropIndicators();
+      // Find the matching drop indicator
+      const ind = document.querySelector(`.drop-indicator[data-drop-group="${gi}"][data-drop-before="${targetIdx}"]`);
+      if (ind) ind.classList.add('active');
+    });
+
+    card.addEventListener('dragleave', (e) => {
+      // Only clear if actually leaving the card
+      if (!card.contains(e.relatedTarget)) {
+        // Don't clear - let indicator handle itself
+      }
+    });
+
+    card.addEventListener('drop', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!state.dragData) return;
+      const rect = card.getBoundingClientRect();
+      const midX = rect.left + rect.width / 2;
+      const gi = parseInt(card.dataset.groupIndex);
+      const pi = parseInt(card.dataset.pageIndex);
+      const targetIdx = e.clientX < midX ? pi : pi + 1;
+      handleDrop(state.dragData.pageIds, gi, targetIdx);
+      clearAllDropIndicators();
+      state.dragData = null;
+    });
+  });
+
+  // Drop on group container (empty area)
+  document.querySelectorAll('.doc-group-pages').forEach(container => {
+    container.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      if (e.target.closest('.page-card') || e.target.closest('.drop-indicator')) return;
+      if (!state.dragData) return;
+      const gi = parseInt(container.dataset.groupIndex);
+      clearAllDropIndicators();
+      const lastInd = container.querySelector(`.drop-indicator:last-of-type`);
+      if (lastInd) lastInd.classList.add('active');
+    });
+    container.addEventListener('drop', (e) => {
+      if (e.target.closest('.page-card') || e.target.closest('.drop-indicator')) return;
+      e.preventDefault();
+      if (!state.dragData) return;
+      const gi = parseInt(container.dataset.groupIndex);
+      handleDrop(state.dragData.pageIds, gi, state.groups[gi].length);
+      clearAllDropIndicators();
+      state.dragData = null;
+    });
+  });
+}
+
+function clearAllDropIndicators() {
+  document.querySelectorAll('.drop-indicator.active').forEach(el => el.classList.remove('active'));
+}
+
+function handleDrop(pageIds, targetGroupIndex, beforeIndex) {
+  saveSnapshot();
+  const dragSet = new Set(pageIds);
+  const allFlat = state.groups.flat();
+  const orderedDrag = allFlat.filter(pid => dragSet.has(pid));
+
+  // Remove from current positions
+  state.groups = state.groups.map(g => g.filter(pid => !dragSet.has(pid)));
+
+  // Recalculate insert index (since removal may have shifted things)
+  const targetGroup = state.groups[targetGroupIndex];
+  const clampedIdx = Math.min(beforeIndex, targetGroup ? targetGroup.length : 0);
+
+  if (targetGroup) {
+    targetGroup.splice(clampedIdx, 0, ...orderedDrag);
+  }
+
+  rebuildGroups();
+  renderAll();
+}
+
+// ── Export ──
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+btnExport.addEventListener('click', async () => {
+  if (state.pages.length === 0) return;
+  showProgress('PDFを生成中...');
+  try {
+    // Step 1: Generate all PDFs first
+    const generated = []; // { blob, fileName }
+    const validGroups = state.groups.filter(g => g.length > 0);
+
+    for (let i = 0; i < validGroups.length; i++) {
+      const group = validGroups[i];
+      updateProgress((i / validGroups.length) * 80, `ファイル ${i + 1} / ${validGroups.length} を生成中...`);
+      const newPdf = await PDFDocument.create();
+      for (let pi = 0; pi < group.length; pi++) {
+        const page = state.pages.find(p => p.id === group[pi]);
+        if (!page) continue;
+        const sourceFile = state.files.find(f => f.id === page.fileId);
+        if (!sourceFile) continue;
+        const [copiedPage] = await newPdf.copyPages(sourceFile.pdfDoc, [page.filePageIndex]);
+        if (page.rotation !== 0) {
+          copiedPage.setRotation(PDFLib.degrees(copiedPage.getRotation().angle + page.rotation));
+        }
+        newPdf.addPage(copiedPage);
+      }
+      const pdfBytes = await newPdf.save();
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      const fileName = validGroups.length > 1 ? `output_${i + 1}.pdf` : 'output.pdf';
+      generated.push({ blob, fileName });
+    }
+
+    // Step 2: Download all, with a delay between each to avoid browser blocking
+    updateProgress(90, 'ダウンロード中...');
+    for (let i = 0; i < generated.length; i++) {
+      const { blob, fileName } = generated[i];
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      // Wait before next download and before cleanup
+      await delay(600);
+      document.body.removeChild(a);
+      // Revoke after generous delay
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    }
+
+    hideProgress();
+    showToast(`${generated.length}件のPDFを出力しました！`);
+  } catch (err) {
+    hideProgress();
+    showToast('エラーが発生しました: ' + err.message);
+    console.error(err);
+  }
+});
+
+// ── Progress / Toast / Utility ──
+function showProgress(title) {
+  document.getElementById('progressTitle').textContent = title;
+  document.getElementById('progressBar').style.width = '0%';
+  document.getElementById('progressText').textContent = '準備中...';
+  document.getElementById('progressOverlay').classList.remove('hidden');
+}
+function updateProgress(percent, text) {
+  document.getElementById('progressBar').style.width = percent + '%';
+  if (text) document.getElementById('progressText').textContent = text;
+}
+function hideProgress() { document.getElementById('progressOverlay').classList.add('hidden'); }
+
+function showToast(message) {
+  const existing = document.querySelector('.toast');
+  if (existing) existing.remove();
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> ${message}`;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+</script>
+</body>
+</html>
