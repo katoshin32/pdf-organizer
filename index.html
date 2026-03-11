@@ -997,7 +997,7 @@ async function renderThumb(pageId) {
   if (!container) return;
   try {
     const pdfPage = await file.pdfJs.getPage(page.filePageIndex + 1);
-    const viewport = pdfPage.getViewport({ scale: 0.5, rotation: page.rotation });
+    const viewport = pdfPage.getViewport({ scale: 0.5, rotation: (pdfPage.rotate || 0) + (page.rotation || 0) });
     const canvas = document.createElement('canvas');
     canvas.width = viewport.width;
     canvas.height = viewport.height;
@@ -1524,7 +1524,7 @@ async function renderPageToBase64(page, scale) {
   const file = state.files.find(f => f.id === page.fileId);
   if (!file) throw new Error(`File not found for page ${page.id}`);
   const pdfPage = await file.pdfJs.getPage(page.filePageIndex + 1);
-  const viewport = pdfPage.getViewport({ scale: scale || 1.5, rotation: page.rotation });
+  const viewport = pdfPage.getViewport({ scale: scale || 1.5, rotation: (pdfPage.rotate || 0) + (page.rotation || 0) });
   const canvas = document.createElement('canvas');
   canvas.width = viewport.width;
   canvas.height = viewport.height;
@@ -2028,14 +2028,15 @@ async function renderPreview(pageId) {
   try {
     const pdfPage = await file.pdfJs.getPage(page.filePageIndex + 1);
     // Calculate scale to fit screen while being readable
-    const baseViewport = pdfPage.getViewport({ scale: 1, rotation: page.rotation });
+    const totalRotation = (pdfPage.rotate || 0) + (page.rotation || 0);
+    const baseViewport = pdfPage.getViewport({ scale: 1, rotation: totalRotation });
     const maxW = window.innerWidth * 0.88;
     const maxH = window.innerHeight * 0.88;
     const scaleW = maxW / baseViewport.width;
     const scaleH = maxH / baseViewport.height;
     const scale = Math.min(scaleW, scaleH, 3); // cap at 3x for readability
 
-    const viewport = pdfPage.getViewport({ scale, rotation: page.rotation });
+    const viewport = pdfPage.getViewport({ scale, rotation: totalRotation });
     const canvas = document.createElement('canvas');
     canvas.width = viewport.width;
     canvas.height = viewport.height;
