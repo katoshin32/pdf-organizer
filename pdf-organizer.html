@@ -582,6 +582,71 @@
     color: var(--greige-500);
     white-space: nowrap;
   }
+  .preview-ocr-panel {
+    position: fixed;
+    right: 0; top: 0; bottom: 0;
+    width: 380px;
+    background: rgba(255,255,255,0.97);
+    backdrop-filter: blur(8px);
+    z-index: 303;
+    display: flex; flex-direction: column;
+    box-shadow: -4px 0 24px rgba(0,0,0,0.15);
+    transform: translateX(100%);
+    transition: transform 0.25s ease;
+  }
+  .preview-ocr-panel.open {
+    transform: translateX(0);
+  }
+  .preview-ocr-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--greige-200);
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--greige-800);
+  }
+  .preview-ocr-header button {
+    background: none; border: none;
+    font-size: 20px; cursor: pointer;
+    color: var(--greige-500);
+  }
+  .preview-ocr-header button:hover { color: var(--greige-800); }
+  .preview-ocr-body {
+    flex: 1; overflow-y: auto;
+    padding: 16px 18px;
+    font-size: 14px;
+    line-height: 1.75;
+    color: var(--greige-800);
+    white-space: pre-wrap;
+    word-break: break-all;
+    user-select: text;
+  }
+  .preview-ocr-body .ocr-loading {
+    display: flex; align-items: center; gap: 8px;
+    color: var(--greige-500);
+    padding: 20px 0;
+  }
+  .preview-ocr-footer {
+    padding: 12px 18px;
+    border-top: 1px solid var(--greige-200);
+    display: flex; gap: 8px;
+  }
+  .preview-ocr-footer button {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid var(--greige-200);
+    border-radius: 8px;
+    background: var(--greige-50);
+    color: var(--greige-700);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .preview-ocr-footer button:hover {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
 </style>
 </head>
 <body>
@@ -720,6 +785,22 @@
     <span class="toolbar-label">ファイル名：</span>
     <input type="text" class="preview-rename-input" id="previewRenameInput" placeholder="グループ名（ファイル名）">
     <button id="previewAiRename" title="AIで命名">🤖</button>
+    <div class="toolbar-sep"></div>
+    <button id="previewOcrBtn" title="テキスト読取 (T)">📝</button>
+  </div>
+  <!-- OCR Text Panel (slides in from right) -->
+  <div class="preview-ocr-panel" id="previewOcrPanel">
+    <div class="preview-ocr-header">
+      <span>テキスト読取 (OCR)</span>
+      <button id="previewOcrClose" title="閉じる">&times;</button>
+    </div>
+    <div class="preview-ocr-body" id="previewOcrBody">
+      ページのテキストを読み取るには上のボタンを押してください。
+    </div>
+    <div class="preview-ocr-footer">
+      <button id="previewOcrCopy">コピー</button>
+      <button id="previewOcrReadAll">全ページ読取</button>
+    </div>
   </div>
   <button class="preview-close" id="previewClose" title="閉じる (Esc)">&times;</button>
   <button class="preview-nav prev" id="previewPrev" title="前のページ (←)">&#8249;</button>
@@ -2031,6 +2112,14 @@ async function openPreview(pageId) {
   await renderPreview(pageId);
   updatePreviewNav();
   updatePreviewToolbar(pageId);
+  // Update OCR panel if it's open
+  if (previewOcrPanel.classList.contains('open')) {
+    if (ocrCache[pageId]) {
+      previewOcrBody.textContent = ocrCache[pageId];
+    } else {
+      runOcrForPage(pageId);
+    }
+  }
 }
 
 function closePreview() {
@@ -2038,6 +2127,7 @@ function closePreview() {
   document.body.style.overflow = '';
   previewContainer.innerHTML = '';
   previewPageId = null;
+  previewOcrPanel.classList.remove('open');
 }
 
 function updatePreviewToolbar(pageId) {
@@ -2167,6 +2257,130 @@ previewAiRename.addEventListener('click', async (e) => {
   }
 });
 
+// ── Preview toolbar: OCR (Text extraction via Gemini Vision) ──
+const previewOcrBtn = document.getElementById('previewOcrBtn');
+const previewOcrPanel = document.getElementById('previewOcrPanel');
+const previewOcrClose = document.getElementById('previewOcrClose');
+const previewOcrBody = document.getElementById('previewOcrBody');
+const previewOcrCopy = document.getElementById('previewOcrCopy');
+const previewOcrReadAll = document.getElementById('previewOcrReadAll');
+
+let ocrCache = {}; // pageId → extracted text
+
+function toggleOcrPanel() {
+  previewOcrPanel.classList.toggle('open');
+  if (previewOcrPanel.classList.contains('open') && previewPageId) {
+    if (ocrCache[previewPageId]) {
+      previewOcrBody.textContent = ocrCache[previewPageId];
+    } else {
+      runOcrForPage(previewPageId);
+    }
+  }
+}
+
+async function runOcrForPage(pageId) {
+  if (!geminiApiKey) {
+    previewOcrBody.textContent = 'APIキーを設定してください。';
+    return;
+  }
+  const page = state.pages.find(p => p.id === pageId);
+  if (!page) return;
+
+  previewOcrBody.innerHTML = '<div class="ocr-loading"><span style="animation:spin 1s linear infinite;display:inline-block">⏳</span> テキストを読み取り中...</div>';
+
+  try {
+    const b64 = await renderPageToBase64(page, 1.5);
+    const prompt = `この画像に含まれるテキストを、できる限り正確に書き起こしてください。
+レイアウト（段組み・表・箇条書き等）はできるだけ再現してください。
+読み取れない文字は「[?]」としてください。
+テキストのみを出力し、説明や前置きは不要です。`;
+
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`;
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [
+          { text: prompt },
+          { inline_data: { mime_type: 'image/jpeg', data: b64 } }
+        ]}],
+        generationConfig: { temperature: 0.1, maxOutputTokens: 4096 }
+      })
+    });
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error?.message || `API Error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '(テキストを検出できませんでした)';
+    ocrCache[pageId] = text;
+
+    // Only update if still viewing the same page
+    if (previewPageId === pageId && previewOcrPanel.classList.contains('open')) {
+      previewOcrBody.textContent = text;
+    }
+  } catch (err) {
+    if (previewPageId === pageId) {
+      previewOcrBody.textContent = 'エラー: ' + err.message;
+    }
+  }
+}
+
+async function runOcrForAllGroupPages() {
+  if (!geminiApiKey || !previewPageId) return;
+  const gi = findGroupForPage(previewPageId);
+  if (gi < 0) return;
+  const group = state.groups[gi];
+
+  previewOcrBody.innerHTML = '<div class="ocr-loading"><span style="animation:spin 1s linear infinite;display:inline-block">⏳</span> 全ページを読み取り中 (0/' + group.length + ')...</div>';
+
+  const allTexts = [];
+  for (let i = 0; i < group.length; i++) {
+    const pageId = group[i];
+    if (ocrCache[pageId]) {
+      allTexts.push(`--- ページ ${i + 1} ---\n${ocrCache[pageId]}`);
+    } else {
+      previewOcrBody.innerHTML = `<div class="ocr-loading"><span style="animation:spin 1s linear infinite;display:inline-block">⏳</span> 全ページを読み取り中 (${i}/${group.length})...</div>`;
+      await runOcrForPage(pageId);
+      if (ocrCache[pageId]) {
+        allTexts.push(`--- ページ ${i + 1} ---\n${ocrCache[pageId]}`);
+      }
+      // Small delay between requests
+      if (i < group.length - 1) await new Promise(r => setTimeout(r, 300));
+    }
+  }
+
+  const combined = allTexts.join('\n\n');
+  if (previewOcrPanel.classList.contains('open')) {
+    previewOcrBody.textContent = combined;
+  }
+}
+
+previewOcrBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleOcrPanel(); });
+previewOcrClose.addEventListener('click', () => previewOcrPanel.classList.remove('open'));
+
+previewOcrCopy.addEventListener('click', async () => {
+  const text = previewOcrBody.textContent;
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast('テキストをコピーしました');
+  } catch {
+    // Fallback for non-HTTPS
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('テキストをコピーしました');
+  }
+});
+
+previewOcrReadAll.addEventListener('click', (e) => { e.stopPropagation(); runOcrForAllGroupPages(); });
+
 // Keyboard navigation in preview
 document.addEventListener('keydown', (e) => {
   if (previewPageId === null) return;
@@ -2184,6 +2398,9 @@ document.addEventListener('keydown', (e) => {
   } else if (e.key === 'r' || e.key === 'R') {
     e.preventDefault();
     previewRotate(e.shiftKey ? -90 : 90);
+  } else if (e.key === 't' || e.key === 'T') {
+    e.preventDefault();
+    toggleOcrPanel();
   }
 });
 </script>
