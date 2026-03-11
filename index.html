@@ -1558,8 +1558,7 @@ btnAiSplit.addEventListener('click', async () => {
     // Split into batches to keep request size manageable
     const BATCH_SIZE = 10;
     const numBatches = Math.ceil(totalPages / BATCH_SIZE);
-    const allDocuments = []; // { page, date, type, author, rotation }
-    const allRotations = []; // { page, rotation } for individual page corrections
+    const allDocuments = []; // { page, date, type, author }
 
     for (let batch = 0; batch < numBatches; batch++) {
       const batchStart = batch * BATCH_SIZE;
@@ -1595,43 +1594,14 @@ btnAiSplit.addEventListener('click', async () => {
 ■ タスク2：各書面の情報を読み取る
 各書面について以下の情報を読み取ってください。
 
-■ タスク3：ページの向きを判定する
-各ページの画像を見て、テキストや写真が正しい向き（正位置）で表示されているかを慎重に判定してください。
-
-【重要な注意事項 — 誤検出を避けること】
-★ ほとんどのページは正位置（rotation: 0）です。回転が本当に必要なページだけをpageRotationsに含めてください。
-★ 迷った場合は rotation: 0（正位置）としてください。誤って回転するより、回転しない方が安全です。
-★ 以下は回転不要です：
-  - 普通に文字が上から下に読める書面（たとえ少し斜めでも）
-  - 領収書・請求書・報告書など一般的な書面でテキストが普通に読める場合
-  - 書面の中に横書きの表がある場合でも、本文が正位置なら回転不要
-  - 写真の中の文字が小さく斜めになっていても、写真全体が正位置なら回転不要
-
-【回転が必要なページの確実な見分け方】
-回転が必要なのは、ページ全体の主要テキストが明らかに横倒しまたは上下逆の場合のみです：
-- ページの主要テキスト全体が90°横倒しになっている（文字が左右どちらかに完全に倒れている）
-- 登記事項証明書など横長の書類が縦の用紙にスキャンされ、書面全体の文字が横倒しになっている
-- 写真ページで被写体全体が明らかに横倒しになっている
-- ページ全体が上下逆さまになっている
-
-【回転角度の決め方】
-- 文字が左に倒れている（頭が左向き、足が右向き）→ rotation: 90
-- 文字が右に倒れている（頭が右向き、足が左向き）→ rotation: 270
-- 文字が上下逆さま → rotation: 180
-- 正位置（そのままで読める）→ rotation: 0（pageRotationsに含めなくてよい）
-
 【回答形式】
 以下のJSON形式のみで回答してください。余計な説明は不要です。
 
 {
   "documents": [
-    { "page": ${batchStart + 1}, "evidence": "甲1", "date": "20260310", "type": "売買契約書", "author": "", "rotation": 0 },
-    { "page": 5, "evidence": "", "date": "", "type": "写真（自動車）", "author": "", "rotation": 0 },
-    { "page": 8, "evidence": "", "date": "", "type": "Webページ（セカンドストリート）", "author": "", "rotation": 0 }
-  ],
-  "pageRotations": [
-    { "page": 3, "rotation": 90 },
-    { "page": 7, "rotation": 180 }
+    { "page": ${batchStart + 1}, "evidence": "甲1", "date": "20260310", "type": "売買契約書", "author": "" },
+    { "page": 5, "evidence": "", "date": "", "type": "写真（自動車）", "author": "" },
+    { "page": 8, "evidence": "", "date": "", "type": "Webページ（セカンドストリート）", "author": "" }
   ]
 }
 
@@ -1647,22 +1617,36 @@ btnAiSplit.addEventListener('click', async () => {
   ・地図→「地図（場所名）」
   ・メールを印刷したもの→「メール（差出人名 or 件名）」
 - author: 作成者名（弁護士名、当事者名等）。書籍の場合は著者名。不明なら空文字""
-- rotation: この書面の先頭ページの回転角度（下記pageRotationsと同じ）。正位置なら0
 
-■ pageRotationsフィールドの説明：
-この範囲内で正位置でないページのみをここに含める。正位置のページは含めないこと。
-★ ほとんどのページは正位置です。本当に回転が必要なページだけを含めてください。
-★ 迷った場合はそのページをpageRotationsに含めないでください（＝正位置扱い）。
-- page: ページ番号（通しページ番号、1始まり）
-- rotation: 正位置にするための時計回り回転角度
-  - 90 = ページ全体の主要テキストが左に完全に倒れている場合
-  - 180 = ページ全体が上下逆さまの場合
-  - 270 = ページ全体の主要テキストが右に完全に倒れている場合
-回転が必要なページが連続する場合は1ページずつ全て列挙すること。
-回転が必要なページがない場合は空配列[]とすること。
+■ タスク3：ページの向き判定（各ページごと）
+各ページの画像を見て、テキストが正しく読める向きかどうかを判定してください。
+
+"pageRotations": { "ページ番号": 回転角度, ... }
+
+- 回転角度は、そのページを正位置にするための時計回り回転角度（0, 90, 180, 270のいずれか）
+- 0 = そのまま正しく読める（デフォルト）
+- 90 = テキストが左に90度倒れている（時計回りに90度回転すれば正位置になる）
+- 180 = 上下逆さま
+- 270 = テキストが右に90度倒れている（時計回りに270度回転すれば正位置になる）
+
+★★★ 非常に重要なルール ★★★
+- 大多数のページは正位置（0）です。確信がある場合のみ0以外を指定してください。
+- 判定基準は「ページ全体の主要な本文テキストの向き」です。
+- 表、図表、ロゴ、印影、スタンプ等が横向きでも、本文テキストが正位置なら0です。
+- 領収書・レシートの中の表や金額が横向きでも、書面タイトルや主要テキストが正位置なら0です。
+- 迷ったら必ず0としてください。間違って回転させるよりも、回転しない方が安全です。
+
+回転が不要なページ（=0のページ）はpageRotationsに含めなくて構いません。
+
+【回答形式 - 最終版】
+{
+  "documents": [...],
+  "pageRotations": { "5": 90, "12": 180 }
+}
 
 この範囲内（ページ${batchStart + 1}〜${batchEnd}）で新しい書面が始まるページのみをdocumentsに含めてください。
-新しい書面の開始が見つからない場合は空配列を返してください：{ "documents": [], "pageRotations": [] }`;
+新しい書面の開始が見つからない場合はdocumentsは空配列を返してください。
+回転が必要なページがなければpageRotationsは空オブジェクトを返してください。`;
 
       // Build parts array
       const parts = [{ text: prompt }];
@@ -1730,18 +1714,21 @@ btnAiSplit.addEventListener('click', async () => {
                   evidence: doc.evidence || '',
                   date: (doc.date || '').replace(/[^0-9]/g, ''),
                   type: doc.type || '',
-                  author: doc.author || '',
-                  rotation: doc.rotation || 0
+                  author: doc.author || ''
                 });
               }
             });
           }
-          // Collect page rotations
-          if (Array.isArray(result.pageRotations)) {
-            result.pageRotations.forEach(pr => {
-              const pg = pr.page;
-              if (pg >= batchStart + 1 && pg <= batchEnd && !allRotations.some(r => r.page === pg)) {
-                allRotations.push({ page: pg, rotation: pr.rotation || 0 });
+          // Apply page rotations from AI
+          if (result.pageRotations && typeof result.pageRotations === 'object') {
+            Object.entries(result.pageRotations).forEach(([pgStr, rot]) => {
+              const pgNum = parseInt(pgStr, 10);
+              const rotation = parseInt(rot, 10);
+              if ([90, 180, 270].includes(rotation) && pgNum >= 1 && pgNum <= totalPages) {
+                const pageObj = pages[pgNum - 1];
+                if (pageObj && pageObj.rotation === 0) {
+                  pageObj.rotation = rotation;
+                }
               }
             });
           }
@@ -1802,50 +1789,11 @@ btnAiSplit.addEventListener('click', async () => {
 
     state.groups = newGroups.length > 0 ? newGroups : [allPageIds];
     state.groupNames = newGroups.length > 0 ? newNames : [''];
-
-    // Apply page rotations detected by AI
-    // First, build a complete rotation map from both pageRotations and document-level rotations
-    const rotationMap = new Map(); // pageIndex (0-based) -> rotation
-
-    // From pageRotations (per-page, highest priority)
-    allRotations.forEach(pr => {
-      const pageIdx = pr.page - 1;
-      if (pageIdx >= 0 && pageIdx < totalPages && pr.rotation) {
-        rotationMap.set(pageIdx, pr.rotation);
-      }
-    });
-
-    // From documents[].rotation: apply to all pages of that document if not already set
-    for (let i = 0; i < allDocuments.length; i++) {
-      const doc = allDocuments[i];
-      if (doc.rotation && doc.rotation !== 0) {
-        const startIdx = doc.page - 1;
-        const endIdx = (i + 1 < allDocuments.length) ? allDocuments[i + 1].page - 1 : totalPages;
-        for (let pi = startIdx; pi < endIdx; pi++) {
-          if (!rotationMap.has(pi)) {
-            rotationMap.set(pi, doc.rotation);
-          }
-        }
-      }
-    }
-
-    let rotatedCount = 0;
-    rotationMap.forEach((rotation, pageIdx) => {
-      if (pageIdx >= 0 && pageIdx < allPageIds.length) {
-        const page = state.pages.find(p => p.id === allPageIds[pageIdx]);
-        if (page) {
-          page.rotation = ((page.rotation || 0) + rotation) % 360;
-          rotatedCount++;
-        }
-      }
-    });
-
     state.selected.clear();
     renderAll();
 
     hideProgress();
-    const rotMsg = rotatedCount > 0 ? `（${rotatedCount}ページを自動回転）` : '';
-    showToast(`AIが ${newGroups.length} 件の書面を検出し、自動分割しました${rotMsg}`);
+    showToast(`AIが ${newGroups.length} 件の書面を検出し、自動分割しました`);
 
   } catch (err) {
     hideProgress();
@@ -1895,7 +1843,7 @@ async function aiRenameGroup(groupIndex, btnEl) {
   "date": "20260310",
   "type": "売買契約書",
   "author": "原告太郎",
-  "rotation": 0
+  "pageRotations": { "1": 0, "2": 90 }
 }
 
 各フィールド：
@@ -1909,11 +1857,11 @@ async function aiRenameGroup(groupIndex, btnEl) {
   ・地図→「地図（場所名）」
   ・メール印刷物→「メール（差出人 or 件名）」
 - author: 作成者名（弁護士名、当事者名等）。書籍の場合は著者名。不明なら空文字""
-- rotation: ページの画像が正位置でなければ、正位置にするための時計回りの回転角度。
-  0=正位置（そのまま読める）、90=文字が左に完全に倒れている、180=上下逆、270=文字が右に完全に倒れている。
-  ★ ほとんどのページは正位置（0）です。ページ全体の主要テキストが明らかに横倒し・上下逆の場合のみ0以外を返してください。
-  ★ 迷ったら0（正位置）としてください。誤って回転するより回転しない方が安全です。
-  ★ 書面の中に横書きの表がある場合でも、本文テキストが正位置なら0です。
+- pageRotations: 送信したページの向き判定。キーはページ順序（1始まり）、値は正位置にするための時計回り回転角度（0/90/180/270）。
+  ★ 大多数のページは正位置（0）です。確信がある場合のみ0以外を指定してください。
+  ★ 判定基準は「ページ全体の主要な本文テキストの向き」です。表・図表・ロゴ・印影が横向きでも本文が正位置なら0。
+  ★ 迷ったら必ず0。間違って回転させるより回転しない方が安全です。
+  ★ 回転が不要なページ（=0）は省略して構いません。
 
 JSONのみ回答してください。`;
 
@@ -1951,33 +1899,36 @@ JSONのみ回答してください。`;
     const type = doc.type || '';
     const author = doc.author || '';
 
+    // Apply page rotations if provided
+    if (doc.pageRotations && typeof doc.pageRotations === 'object') {
+      let rotatedCount = 0;
+      Object.entries(doc.pageRotations).forEach(([pgStr, rot]) => {
+        const pgIdx = parseInt(pgStr, 10) - 1; // 1-based → 0-based index within pagesToAnalyze
+        const rotation = parseInt(rot, 10);
+        if ([90, 180, 270].includes(rotation) && pgIdx >= 0 && pgIdx < pagesToAnalyze.length) {
+          const pageId = pagesToAnalyze[pgIdx];
+          const pageObj = state.pages.find(p => p.id === pageId);
+          if (pageObj && pageObj.rotation === 0) {
+            pageObj.rotation = rotation;
+            rotatedCount++;
+          }
+        }
+      });
+      if (rotatedCount > 0) {
+        renderAll();
+      }
+    }
+
     const nameParts = [evidence, date, type, author].filter(Boolean);
     const newName = nameParts.length > 0 ? nameParts.join('_') : '';
 
-    // Apply rotation if detected
-    let rotMsg = '';
-    if (doc.rotation && doc.rotation !== 0) {
-      const rot = doc.rotation;
-      group.forEach(pageId => {
-        const page = state.pages.find(p => p.id === pageId);
-        if (page) page.rotation = ((page.rotation || 0) + rot) % 360;
-      });
-      rotMsg = `（${rot}°回転適用）`;
-    }
-
     if (newName) {
       state.groupNames[groupIndex] = newName;
-      // Update the input field directly, then re-render to show rotation
-      if (rotMsg) {
-        renderAll();
-      } else {
-        const input = document.querySelector(`.group-name-input[data-group-index="${groupIndex}"]`);
-        if (input) input.value = newName;
-      }
-      showToast(`命名: ${newName}${rotMsg}`);
+      const input = document.querySelector(`.group-name-input[data-group-index="${groupIndex}"]`);
+      if (input) input.value = newName;
+      showToast(`命名: ${newName}`);
     } else {
-      if (rotMsg) renderAll();
-      showToast('書面情報を読み取れませんでした' + rotMsg);
+      showToast('書面情報を読み取れませんでした');
     }
 
   } catch (err) {
