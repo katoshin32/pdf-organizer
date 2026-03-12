@@ -1,0 +1,1722 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Armana 案件登録アシスタント</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+:root {
+  --primary: #2563eb;
+  --primary-dark: #1d4ed8;
+  --primary-light: #dbeafe;
+  --success: #16a34a;
+  --success-light: #dcfce7;
+  --warning: #d97706;
+  --warning-light: #fef3c7;
+  --danger: #dc2626;
+  --danger-light: #fee2e2;
+  --gray-50: #f9fafb;
+  --gray-100: #f3f4f6;
+  --gray-200: #e5e7eb;
+  --gray-300: #d1d5db;
+  --gray-400: #9ca3af;
+  --gray-500: #6b7280;
+  --gray-600: #4b5563;
+  --gray-700: #374151;
+  --gray-800: #1f2937;
+  --gray-900: #111827;
+  --radius: 8px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+  --shadow-md: 0 4px 6px rgba(0,0,0,0.07), 0 2px 4px rgba(0,0,0,0.06);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+  background: var(--gray-50);
+  color: var(--gray-800);
+  line-height: 1.6;
+}
+.header {
+  background: white;
+  border-bottom: 1px solid var(--gray-200);
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.header h1 {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--gray-900);
+}
+.header .settings-btn {
+  background: none;
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius);
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--gray-600);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.header .settings-btn:hover { background: var(--gray-100); }
+
+.container { max-width: 960px; margin: 0 auto; padding: 24px; }
+
+/* Stepper */
+.stepper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  margin-bottom: 32px;
+}
+.step-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--gray-400);
+}
+.step-item.active { color: var(--primary); font-weight: 600; }
+.step-item.done { color: var(--success); }
+.step-num {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  border: 2px solid var(--gray-300);
+  background: white;
+  flex-shrink: 0;
+}
+.step-item.active .step-num { border-color: var(--primary); background: var(--primary); color: white; }
+.step-item.done .step-num { border-color: var(--success); background: var(--success); color: white; }
+.step-connector {
+  width: 40px;
+  height: 2px;
+  background: var(--gray-200);
+  margin: 0 8px;
+  flex-shrink: 0;
+}
+.step-connector.done { background: var(--success); }
+
+/* Card */
+.card {
+  background: white;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 24px;
+  margin-bottom: 20px;
+}
+.card h2 {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 16px;
+  color: var(--gray-900);
+}
+.card h3 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 20px 0 12px;
+  color: var(--gray-700);
+  border-bottom: 1px solid var(--gray-100);
+  padding-bottom: 6px;
+}
+
+/* Upload area */
+.upload-area {
+  border: 2px dashed var(--gray-300);
+  border-radius: var(--radius);
+  padding: 48px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+.upload-area:hover, .upload-area.dragover {
+  border-color: var(--primary);
+  background: var(--primary-light);
+}
+.upload-area .icon { font-size: 48px; margin-bottom: 12px; }
+.upload-area p { color: var(--gray-500); font-size: 14px; }
+.upload-area .main-text { font-size: 16px; font-weight: 600; color: var(--gray-700); margin-bottom: 4px; }
+input[type="file"] { display: none; }
+
+/* File info */
+.file-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--gray-50);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+}
+.file-info .file-icon { font-size: 24px; }
+.file-info .file-name { font-weight: 600; font-size: 14px; }
+.file-info .file-size { color: var(--gray-500); font-size: 13px; }
+.file-info .remove-btn {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--gray-400);
+  cursor: pointer;
+  font-size: 18px;
+}
+
+/* Form */
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
+}
+.form-grid.single { grid-template-columns: 1fr; }
+.form-group { display: flex; flex-direction: column; }
+.form-group.full { grid-column: 1 / -1; }
+.form-group label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gray-600);
+  margin-bottom: 4px;
+}
+.form-group label .required {
+  color: var(--danger);
+  font-size: 11px;
+  margin-left: 4px;
+}
+.form-group label .param-name {
+  color: var(--gray-400);
+  font-weight: 400;
+  font-size: 11px;
+  margin-left: 4px;
+}
+.form-group input, .form-group select, .form-group textarea {
+  border: 1px solid var(--gray-300);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--gray-800);
+  transition: border-color 0.2s;
+}
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+}
+.form-group textarea { resize: vertical; min-height: 80px; }
+.form-group input.ai-filled { border-color: var(--success); background: var(--success-light); }
+
+/* Extracted text */
+.extracted-text {
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: 6px;
+  padding: 16px;
+  max-height: 300px;
+  overflow-y: auto;
+  font-size: 14px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  margin-bottom: 16px;
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+.btn-primary { background: var(--primary); color: white; }
+.btn-primary:hover { background: var(--primary-dark); }
+.btn-primary:disabled { background: var(--gray-300); cursor: not-allowed; }
+.btn-success { background: var(--success); color: white; }
+.btn-success:hover { background: #15803d; }
+.btn-outline {
+  background: white;
+  border: 1px solid var(--gray-300);
+  color: var(--gray-700);
+}
+.btn-outline:hover { background: var(--gray-50); }
+.btn-danger { background: var(--danger); color: white; }
+.btn-danger:hover { background: #b91c1c; }
+.btn-group {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+/* Status */
+.status-bar {
+  padding: 12px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.status-bar.info { background: var(--primary-light); color: var(--primary-dark); }
+.status-bar.success { background: var(--success-light); color: #166534; }
+.status-bar.warning { background: var(--warning-light); color: #92400e; }
+.status-bar.error { background: var(--danger-light); color: #991b1b; }
+.spinner {
+  width: 18px; height: 18px;
+  border: 2px solid var(--gray-300);
+  border-top: 2px solid var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Modal */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 100;
+  align-items: center;
+  justify-content: center;
+}
+.modal-overlay.show { display: flex; }
+.modal {
+  background: white;
+  border-radius: var(--radius);
+  padding: 24px;
+  width: 480px;
+  max-width: 90vw;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+}
+.modal h2 { font-size: 18px; margin-bottom: 16px; }
+
+/* Section toggle */
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  padding: 8px 0;
+  user-select: none;
+}
+.section-header h3 { margin: 0; border: none; padding: 0; }
+.section-header .toggle { color: var(--gray-400); font-size: 18px; transition: transform 0.2s; }
+.section-header .toggle.open { transform: rotate(180deg); }
+.section-body { overflow: hidden; transition: max-height 0.3s ease; }
+.section-body.collapsed { max-height: 0 !important; padding: 0; }
+
+/* JSON preview */
+.json-preview {
+  background: var(--gray-900);
+  color: #a5f3fc;
+  padding: 16px;
+  border-radius: 6px;
+  font-family: "Consolas", "Menlo", monospace;
+  font-size: 13px;
+  max-height: 400px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .form-grid { grid-template-columns: 1fr; }
+  .stepper { flex-wrap: wrap; gap: 4px; }
+  .step-connector { width: 20px; }
+  .step-item span { display: none; }
+}
+.hidden { display: none !important; }
+
+/* Tab */
+.tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--gray-200);
+  margin-bottom: 16px;
+}
+.tab {
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--gray-500);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: none;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  font-family: inherit;
+}
+.tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <h1>Armana 案件登録アシスタント</h1>
+  <div style="display:flex;gap:8px">
+    <button class="settings-btn" onclick="showHistory()">
+      <span>&#128203;</span> 履歴
+    </button>
+    <button class="settings-btn" onclick="openSettings()">
+      <span>&#9881;</span> 設定
+    </button>
+  </div>
+</div>
+
+<!-- Settings Modal -->
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal">
+    <h2>設定</h2>
+    <div class="form-group" style="margin-bottom:12px">
+      <label>Armana Webhook URL</label>
+      <input type="url" id="settingWebhookUrl" placeholder="https://webhook.api.kailash-tech.jp/...">
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label>Gemini API Key</label>
+      <input type="password" id="settingGeminiKey" placeholder="AIza...">
+    </div>
+    <div class="form-group" style="margin-bottom:16px">
+      <label>Gemini Model</label>
+      <select id="settingGeminiModel">
+        <option value="gemini-2.0-flash">gemini-2.0-flash (推奨)</option>
+        <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite</option>
+        <option value="gemini-1.5-pro">gemini-1.5-pro</option>
+        <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+      </select>
+    </div>
+    <div class="btn-group">
+      <button class="btn btn-outline" onclick="closeSettings()">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveSettings()">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <!-- Stepper -->
+  <div class="stepper">
+    <div class="step-item active" id="step1indicator">
+      <div class="step-num">1</div><span>ファイル選択</span>
+    </div>
+    <div class="step-connector" id="conn12"></div>
+    <div class="step-item" id="step2indicator">
+      <div class="step-num">2</div><span>AI分析</span>
+    </div>
+    <div class="step-connector" id="conn23"></div>
+    <div class="step-item" id="step3indicator">
+      <div class="step-num">3</div><span>確認・編集</span>
+    </div>
+    <div class="step-connector" id="conn34"></div>
+    <div class="step-item" id="step4indicator">
+      <div class="step-num">4</div><span>登録</span>
+    </div>
+  </div>
+
+  <!-- Step 1: File Upload -->
+  <div id="step1">
+    <div class="card">
+      <h2>1. 書類をアップロード</h2>
+      <p style="color:var(--gray-500); font-size:14px; margin-bottom:16px;">
+        相談受付票、メール、電話メモなどのPDFや画像をアップロードしてください。<br>
+        テキストPDFはそのまま読み取ります。画像・スキャンPDFはGeminiのVision機能で読み取ります。
+      </p>
+
+      <div id="uploadArea" class="upload-area">
+        <div class="icon">&#128196;</div>
+        <p class="main-text">ここにファイルをドロップ、またはクリックして選択</p>
+        <p>PDF / PNG / JPG / JPEG 対応</p>
+      </div>
+      <input type="file" id="fileInput" accept=".pdf,.png,.jpg,.jpeg" multiple>
+
+      <div id="fileList" class="hidden" style="margin-top:16px"></div>
+
+      <div class="btn-group" id="step1Buttons" class="hidden">
+        <button class="btn btn-primary" id="analyzeBtn" onclick="startAnalysis()" disabled>
+          AI分析を開始 &#8594;
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 2: Analysis -->
+  <div id="step2" class="hidden">
+    <div class="card">
+      <h2>2. AI分析</h2>
+      <div id="analysisStatus"></div>
+
+      <div id="extractedTextSection" class="hidden">
+        <div class="tabs">
+          <button class="tab active" onclick="switchTab('text')">抽出テキスト</button>
+          <button class="tab" onclick="switchTab('raw')">AIレスポンス</button>
+        </div>
+        <div id="tabText">
+          <div class="extracted-text" id="extractedText"></div>
+        </div>
+        <div id="tabRaw" class="hidden">
+          <div class="json-preview" id="aiRawResponse"></div>
+        </div>
+      </div>
+
+      <div class="btn-group">
+        <button class="btn btn-outline" onclick="goToStep(1)">&#8592; 戻る</button>
+        <button class="btn btn-primary" id="toFormBtn" onclick="goToStep(3)" disabled>確認・編集へ &#8594;</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 3: Review & Edit -->
+  <div id="step3" class="hidden">
+    <div class="card">
+      <h2>3. 登録内容の確認・編集</h2>
+      <p style="color:var(--gray-500); font-size:14px; margin-bottom:16px;">
+        AI分析の結果を確認し、必要に応じて修正してください。<br>
+        <span style="display:inline-block;width:12px;height:12px;background:var(--success-light);border:1px solid var(--success);border-radius:3px;vertical-align:middle"></span>
+        <span style="font-size:12px">= AIが自動入力した項目</span>
+      </p>
+
+      <!-- 案件基本 -->
+      <h3>案件基本情報</h3>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>案件種別 <span class="required">必須</span><span class="param-name">contact_type</span></label>
+          <select id="f_contact_type">
+            <option value="">選択してください</option>
+            <option value="一般">一般</option>
+            <option value="交通事故">交通事故</option>
+            <option value="離婚">離婚</option>
+            <option value="相続">相続</option>
+            <option value="債務整理">債務整理</option>
+            <option value="労働">労働</option>
+            <option value="不動産">不動産</option>
+            <option value="債権回収">債権回収</option>
+            <option value="刑事">刑事</option>
+            <option value="企業法務">企業法務</option>
+            <option value="障害年金">障害年金</option>
+            <option value="トレント">トレント</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>サブカテゴリ <span class="param-name">sub_contact_type</span></label>
+          <input type="text" id="f_sub_contact_type" list="subCategoryList" placeholder="選択または入力">
+          <datalist id="subCategoryList"></datalist>
+        </div>
+        <div class="form-group">
+          <label>問い合わせ日 <span class="param-name">contact_at</span></label>
+          <input type="datetime-local" id="f_contact_at">
+        </div>
+        <div class="form-group">
+          <label>種別 <span class="param-name">form_type</span></label>
+          <input type="text" id="f_form_type" placeholder="例：電話相談、来所相談">
+        </div>
+        <div class="form-group">
+          <label>連絡手段 <span class="param-name">channel</span></label>
+          <input type="text" id="f_channel" placeholder="例：電話、メール、来所">
+        </div>
+        <div class="form-group">
+          <label>新規 <span class="param-name">new_customer</span></label>
+          <select id="f_new_customer">
+            <option value="">不明</option>
+            <option value="true">新規</option>
+            <option value="false">既存</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>広告媒体 <span class="param-name">media</span></label>
+          <input type="text" id="f_media">
+        </div>
+        <div class="form-group">
+          <label>広告追加情報 <span class="param-name">media_addition</span></label>
+          <input type="text" id="f_media_addition">
+        </div>
+      </div>
+
+      <!-- 依頼者情報 -->
+      <div class="section-header" onclick="toggleSection('clientSection')">
+        <h3>依頼者（当事者）情報</h3>
+        <span class="toggle open" id="clientSectionToggle">&#9660;</span>
+      </div>
+      <div class="section-body" id="clientSection">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>法人名 <span class="param-name">company_name</span></label>
+            <input type="text" id="f_company_name">
+          </div>
+          <div class="form-group">
+            <label>法人名カナ <span class="param-name">company_name_kana</span></label>
+            <input type="text" id="f_company_name_kana">
+          </div>
+          <div class="form-group">
+            <label>姓 <span class="param-name">family_name</span></label>
+            <input type="text" id="f_family_name">
+          </div>
+          <div class="form-group">
+            <label>名 <span class="param-name">first_name</span></label>
+            <input type="text" id="f_first_name">
+          </div>
+          <div class="form-group">
+            <label>姓カナ <span class="param-name">family_name_kana</span></label>
+            <input type="text" id="f_family_name_kana">
+          </div>
+          <div class="form-group">
+            <label>名カナ <span class="param-name">first_name_kana</span></label>
+            <input type="text" id="f_first_name_kana">
+          </div>
+          <div class="form-group">
+            <label>電話番号 <span class="param-name">phone[1].number</span></label>
+            <input type="tel" id="f_phone1">
+          </div>
+          <div class="form-group">
+            <label>電話番号2 <span class="param-name">phone[2].number</span></label>
+            <input type="tel" id="f_phone2">
+          </div>
+          <div class="form-group full">
+            <label>メール <span class="param-name">mail</span></label>
+            <input type="email" id="f_mail">
+          </div>
+          <div class="form-group">
+            <label>郵便番号 <span class="param-name">address[1].postcode</span></label>
+            <input type="text" id="f_address_postcode">
+          </div>
+          <div class="form-group">
+            <label>都道府県 <span class="param-name">address[1].prefecture</span></label>
+            <input type="text" id="f_address_prefecture">
+          </div>
+          <div class="form-group">
+            <label>住所 <span class="param-name">address[1].city</span></label>
+            <input type="text" id="f_address_city">
+          </div>
+          <div class="form-group">
+            <label>建物・部屋番号 <span class="param-name">address[1].building</span></label>
+            <input type="text" id="f_address_building">
+          </div>
+          <div class="form-group">
+            <label>性別 <span class="param-name">gender</span></label>
+            <select id="f_gender">
+              <option value="">不明</option>
+              <option value="male">男性</option>
+              <option value="female">女性</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>年齢 <span class="param-name">age</span></label>
+            <input type="number" id="f_age">
+          </div>
+          <div class="form-group">
+            <label>名前特記 <span class="param-name">name_confirm</span></label>
+            <input type="text" id="f_name_confirm" placeholder="例：聞けず">
+          </div>
+        </div>
+      </div>
+
+      <!-- 相談者情報 -->
+      <div class="section-header" onclick="toggleSection('visitorSection')">
+        <h3>相談者情報（当事者と異なる場合）</h3>
+        <span class="toggle" id="visitorSectionToggle">&#9660;</span>
+      </div>
+      <div class="section-body collapsed" id="visitorSection">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>相談者の法人名 <span class="param-name">visitor_company_name</span></label>
+            <input type="text" id="f_visitor_company_name">
+          </div>
+          <div class="form-group">
+            <label>法人名カナ <span class="param-name">visitor_company_name_kana</span></label>
+            <input type="text" id="f_visitor_company_name_kana">
+          </div>
+          <div class="form-group">
+            <label>姓 <span class="param-name">visitor_family_name</span></label>
+            <input type="text" id="f_visitor_family_name">
+          </div>
+          <div class="form-group">
+            <label>名 <span class="param-name">visitor_first_name</span></label>
+            <input type="text" id="f_visitor_first_name">
+          </div>
+          <div class="form-group">
+            <label>姓カナ <span class="param-name">visitor_family_name_kana</span></label>
+            <input type="text" id="f_visitor_family_name_kana">
+          </div>
+          <div class="form-group">
+            <label>名カナ <span class="param-name">visitor_first_name_kana</span></label>
+            <input type="text" id="f_visitor_first_name_kana">
+          </div>
+          <div class="form-group">
+            <label>電話番号 <span class="param-name">visitor_phone[1].number</span></label>
+            <input type="tel" id="f_visitor_phone1">
+          </div>
+          <div class="form-group">
+            <label>メール <span class="param-name">visitor_mail</span></label>
+            <input type="email" id="f_visitor_mail">
+          </div>
+          <div class="form-group">
+            <label>郵便番号 <span class="param-name">visitor_address[1].postcode</span></label>
+            <input type="text" id="f_visitor_address_postcode">
+          </div>
+          <div class="form-group">
+            <label>都道府県 <span class="param-name">visitor_address[1].prefecture</span></label>
+            <input type="text" id="f_visitor_address_prefecture">
+          </div>
+          <div class="form-group">
+            <label>住所 <span class="param-name">visitor_address[1].city</span></label>
+            <input type="text" id="f_visitor_address_city">
+          </div>
+          <div class="form-group">
+            <label>建物 <span class="param-name">visitor_address[1].building</span></label>
+            <input type="text" id="f_visitor_address_building">
+          </div>
+          <div class="form-group">
+            <label>性別 <span class="param-name">visitor_gender</span></label>
+            <select id="f_visitor_gender">
+              <option value="">不明</option>
+              <option value="male">男性</option>
+              <option value="female">女性</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>年齢 <span class="param-name">visitor_age</span></label>
+            <input type="number" id="f_visitor_age">
+          </div>
+          <div class="form-group">
+            <label>関係 <span class="param-name">visitor_target_relation</span></label>
+            <input type="text" id="f_visitor_target_relation" placeholder="本人の場合は空欄（例：母、配偶者）">
+          </div>
+          <div class="form-group">
+            <label>名前特記 <span class="param-name">visitor_name_confirm</span></label>
+            <input type="text" id="f_visitor_name_confirm">
+          </div>
+        </div>
+      </div>
+
+      <!-- 相手方情報 -->
+      <div class="section-header" onclick="toggleSection('opponentSection')">
+        <h3>相手方情報</h3>
+        <span class="toggle" id="opponentSectionToggle">&#9660;</span>
+      </div>
+      <div class="section-body collapsed" id="opponentSection">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>法人名 <span class="param-name">opponent_company_name</span></label>
+            <input type="text" id="f_opponent_company_name">
+          </div>
+          <div class="form-group">
+            <label>法人名カナ <span class="param-name">opponent_company_name_kana</span></label>
+            <input type="text" id="f_opponent_company_name_kana">
+          </div>
+          <div class="form-group">
+            <label>姓 <span class="param-name">opponent_family_name</span></label>
+            <input type="text" id="f_opponent_family_name">
+          </div>
+          <div class="form-group">
+            <label>名 <span class="param-name">opponent_first_name</span></label>
+            <input type="text" id="f_opponent_first_name">
+          </div>
+          <div class="form-group">
+            <label>姓カナ <span class="param-name">opponent_family_name_kana</span></label>
+            <input type="text" id="f_opponent_family_name_kana">
+          </div>
+          <div class="form-group">
+            <label>名カナ <span class="param-name">opponent_first_name_kana</span></label>
+            <input type="text" id="f_opponent_first_name_kana">
+          </div>
+          <div class="form-group">
+            <label>名前特記 <span class="param-name">opponent_name_confirm</span></label>
+            <input type="text" id="f_opponent_name_confirm" placeholder="例：ハンドルネームのみ判明">
+          </div>
+          <div class="form-group">
+            <label>相手方代理人（弁護士名） <span class="param-name">memo内</span></label>
+            <input type="text" id="f_opponent_attorney_name" placeholder="例：高山愛">
+          </div>
+          <div class="form-group">
+            <label>相手方代理人（事務所名） <span class="param-name">memo内</span></label>
+            <input type="text" id="f_opponent_attorney_firm" placeholder="例：ミカタ弁護士法人">
+          </div>
+        </div>
+      </div>
+
+      <!-- 相談内容 -->
+      <div class="section-header" onclick="toggleSection('contentSection')">
+        <h3>相談内容・その他</h3>
+        <span class="toggle open" id="contentSectionToggle">&#9660;</span>
+      </div>
+      <div class="section-body" id="contentSection">
+        <div class="form-grid single">
+          <div class="form-group full">
+            <label>問い合わせ内容 <span class="param-name">content</span></label>
+            <textarea id="f_content" rows="6"></textarea>
+          </div>
+          <div class="form-group full">
+            <label>相談内容メモ <span class="param-name">memo</span></label>
+            <textarea id="f_memo" rows="10"></textarea>
+          </div>
+          <div class="form-group full">
+            <label>対応内容 <span class="param-name">responded_explanation</span></label>
+            <textarea id="f_responded_explanation" rows="3"></textarea>
+          </div>
+        </div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>問い合わせ契機 <span class="param-name">trigger_inquiry</span></label>
+            <input type="text" id="f_trigger_inquiry" placeholder="カンマ区切りで複数入力可">
+          </div>
+          <div class="form-group">
+            <label>指名担当者 <span class="param-name">person_in_charge</span></label>
+            <input type="text" id="f_person_in_charge">
+          </div>
+          <div class="form-group">
+            <label>担当事務所 <span class="param-name">group_name</span></label>
+            <input type="text" id="f_group_name">
+          </div>
+          <div class="form-group">
+            <label>他弁護士への相談 <span class="param-name">has_competitor</span></label>
+            <select id="f_has_competitor">
+              <option value="">不明</option>
+              <option value="あり">あり</option>
+              <option value="なし">なし</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>折返希望時間帯 <span class="param-name">callback_time</span></label>
+            <input type="text" id="f_callback_time" placeholder="例：午前中">
+          </div>
+          <div class="form-group">
+            <label>連絡時注意 <span class="param-name">phone_attention</span></label>
+            <input type="text" id="f_phone_attention">
+          </div>
+          <div class="form-group">
+            <label>連絡方法（希望） <span class="param-name">client_channel</span></label>
+            <input type="text" id="f_client_channel" placeholder="例：電話, メール">
+          </div>
+        </div>
+      </div>
+
+      <!-- 離婚情報 -->
+      <div class="section-header" onclick="toggleSection('divorceSection')">
+        <h3>離婚案件情報（該当する場合）</h3>
+        <span class="toggle" id="divorceSectionToggle">&#9660;</span>
+      </div>
+      <div class="section-body collapsed" id="divorceSection">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>手続きの状況 <span class="param-name">divorce_info_procedure_status</span></label>
+            <select id="f_divorce_info_procedure_status">
+              <option value="">選択してください</option>
+              <option>協議中</option>
+              <option>協議行き詰まり</option>
+              <option>協議済み</option>
+              <option>調停前</option>
+              <option>調停中</option>
+              <option>調停済み</option>
+              <option>審判前</option>
+              <option>審判中</option>
+              <option>審判済み</option>
+              <option>訴訟前</option>
+              <option>訴訟中</option>
+              <option>訴訟済み</option>
+              <option>なし</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>相談内容 <span class="param-name">divorce_info_consultation_type</span></label>
+            <select id="f_divorce_info_consultation_type">
+              <option value="">選択してください</option>
+              <option>離婚</option>
+              <option>婚姻無効</option>
+              <option>内縁</option>
+              <option>親権争い</option>
+              <option>親権変更</option>
+              <option>面会交流</option>
+              <option>子の引渡し</option>
+              <option>認知請求</option>
+              <option>親子関係不存在</option>
+              <option>養育費</option>
+              <option>財産分与</option>
+              <option>婚姻費用</option>
+              <option>慰謝料</option>
+              <option>年金分割</option>
+              <option>不倫慰謝料</option>
+              <option>不倫慰謝料請求されている</option>
+              <option>その他</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>障害名/病名 <span class="param-name">disability_disease_name</span></label>
+            <input type="text" id="f_disability_disease_name">
+          </div>
+        </div>
+      </div>
+
+      <div class="btn-group">
+        <button class="btn btn-outline" onclick="goToStep(2)">&#8592; 戻る</button>
+        <button class="btn btn-outline" onclick="previewJson()">JSONプレビュー</button>
+        <button class="btn btn-success" onclick="goToStep(4)">登録内容を確認 &#8594;</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 4: Send -->
+  <div id="step4" class="hidden">
+    <div class="card">
+      <h2>4. Armanaに登録</h2>
+
+      <div id="jsonPreviewArea">
+        <p style="color:var(--gray-500); font-size:14px; margin-bottom:12px;">以下の内容でArmanaに送信します。</p>
+        <div class="json-preview" id="finalJsonPreview"></div>
+      </div>
+
+      <div id="sendStatus" class="hidden" style="margin-top:16px"></div>
+
+      <div class="btn-group">
+        <button class="btn btn-outline" onclick="goToStep(3)">&#8592; 修正する</button>
+        <button class="btn btn-primary" id="sendBtn" onclick="sendToArmana()">Armanaに登録する</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- History Modal -->
+<div class="modal-overlay" id="historyModal">
+  <div class="modal" style="width:720px">
+    <h2>登録履歴（直近50件）</h2>
+    <div style="max-height:400px;overflow-y:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="border-bottom:2px solid var(--gray-200);text-align:left">
+            <th style="padding:6px 8px">日時</th>
+            <th style="padding:6px 8px">種別</th>
+            <th style="padding:6px 8px">依頼者</th>
+            <th style="padding:6px 8px">相手方</th>
+            <th style="padding:6px 8px">概要</th>
+          </tr>
+        </thead>
+        <tbody id="historyTableBody"></tbody>
+      </table>
+    </div>
+    <div class="btn-group">
+      <button class="btn btn-outline" onclick="if(confirm('履歴を全件削除しますか？')){localStorage.removeItem('armana_history');document.getElementById('historyModal').classList.remove('show');}">履歴を削除</button>
+      <button class="btn btn-primary" onclick="document.getElementById('historyModal').classList.remove('show')">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- JSON Preview Modal -->
+<div class="modal-overlay" id="jsonModal">
+  <div class="modal" style="width:600px">
+    <h2>送信JSONプレビュー</h2>
+    <div class="json-preview" id="jsonModalContent" style="max-height:500px"></div>
+    <div class="btn-group">
+      <button class="btn btn-outline" onclick="document.getElementById('jsonModal').classList.remove('show')">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// State
+// ============================================================
+let uploadedFiles = [];
+let extractedTexts = [];
+let aiAnalysisResult = null;
+let currentStep = 1;
+
+// ============================================================
+// Settings
+// ============================================================
+function loadSettings() {
+  return {
+    webhookUrl: localStorage.getItem('armana_webhook_url') || '',
+    geminiKey: localStorage.getItem('armana_gemini_key') || '',
+    geminiModel: localStorage.getItem('armana_gemini_model') || 'gemini-2.0-flash'
+  };
+}
+
+function openSettings() {
+  const s = loadSettings();
+  document.getElementById('settingWebhookUrl').value = s.webhookUrl;
+  document.getElementById('settingGeminiKey').value = s.geminiKey;
+  document.getElementById('settingGeminiModel').value = s.geminiModel;
+  document.getElementById('settingsModal').classList.add('show');
+}
+
+function closeSettings() {
+  document.getElementById('settingsModal').classList.remove('show');
+}
+
+function saveSettings() {
+  localStorage.setItem('armana_webhook_url', document.getElementById('settingWebhookUrl').value.trim());
+  localStorage.setItem('armana_gemini_key', document.getElementById('settingGeminiKey').value.trim());
+  localStorage.setItem('armana_gemini_model', document.getElementById('settingGeminiModel').value);
+  closeSettings();
+}
+
+// ============================================================
+// Step navigation
+// ============================================================
+function goToStep(n) {
+  currentStep = n;
+  for (let i = 1; i <= 4; i++) {
+    document.getElementById('step' + i).classList.toggle('hidden', i !== n);
+    const ind = document.getElementById('step' + i + 'indicator');
+    ind.className = 'step-item' + (i < n ? ' done' : i === n ? ' active' : '');
+  }
+  for (let i = 1; i <= 3; i++) {
+    const conn = document.getElementById('conn' + i + (i + 1));
+    conn.className = 'step-connector' + (i < n ? ' done' : '');
+  }
+  if (n === 4) {
+    document.getElementById('finalJsonPreview').textContent = JSON.stringify(buildPayload(), null, 2);
+    document.getElementById('sendStatus').classList.add('hidden');
+    document.getElementById('sendBtn').disabled = false;
+  }
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ============================================================
+// File upload
+// ============================================================
+const uploadArea = document.getElementById('uploadArea');
+const fileInput = document.getElementById('fileInput');
+
+uploadArea.addEventListener('click', () => fileInput.click());
+uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+uploadArea.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadArea.classList.remove('dragover');
+  handleFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener('change', e => handleFiles(e.target.files));
+
+function handleFiles(files) {
+  for (const f of files) {
+    if (!f.type.match(/pdf|png|jpeg|jpg/i)) continue;
+    if (uploadedFiles.find(x => x.name === f.name && x.size === f.size)) continue;
+    uploadedFiles.push(f);
+  }
+  renderFileList();
+}
+
+function renderFileList() {
+  const list = document.getElementById('fileList');
+  if (uploadedFiles.length === 0) {
+    list.classList.add('hidden');
+    document.getElementById('analyzeBtn').disabled = true;
+    return;
+  }
+  list.classList.remove('hidden');
+  document.getElementById('analyzeBtn').disabled = false;
+  list.innerHTML = uploadedFiles.map((f, i) => `
+    <div class="file-info">
+      <span class="file-icon">${f.type.includes('pdf') ? '&#128196;' : '&#128444;'}</span>
+      <div>
+        <div class="file-name">${f.name}</div>
+        <div class="file-size">${(f.size / 1024).toFixed(1)} KB</div>
+      </div>
+      <button class="remove-btn" onclick="removeFile(${i})" title="削除">&#10005;</button>
+    </div>
+  `).join('');
+}
+
+function removeFile(i) {
+  uploadedFiles.splice(i, 1);
+  renderFileList();
+}
+
+// ============================================================
+// Analysis
+// ============================================================
+async function startAnalysis() {
+  const settings = loadSettings();
+  if (!settings.geminiKey) {
+    alert('設定画面でGemini APIキーを入力してください。');
+    openSettings();
+    return;
+  }
+
+  goToStep(2);
+  const statusEl = document.getElementById('analysisStatus');
+  const textSection = document.getElementById('extractedTextSection');
+  textSection.classList.add('hidden');
+  document.getElementById('toFormBtn').disabled = true;
+
+  statusEl.innerHTML = '<div class="status-bar info"><div class="spinner"></div>ファイルを読み込んでいます...</div>';
+
+  try {
+    // Read files as base64
+    const fileParts = [];
+    for (const file of uploadedFiles) {
+      const base64 = await fileToBase64(file);
+      const mimeType = file.type || (file.name.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg');
+      fileParts.push({ inline_data: { mime_type: mimeType, data: base64 } });
+    }
+
+    statusEl.innerHTML = '<div class="status-bar info"><div class="spinner"></div>Gemini APIで分析中...</div>';
+
+    const prompt = `あなたは日本の法律事務所の受付担当者です。以下のドキュメント（相談受付票、電話メモ、メール、相談記録等）から、案件管理システム（Armana）への登録に必要な情報を抽出してJSON形式で返してください。
+
+■ 抽出ルール
+1. 「依頼者（当事者）」と「相談者」が異なる場合があります（例：家族が代わりに相談）。文脈から判断してください。
+2. 相手方の情報は、氏名だけでなくハンドルネーム・通称・法人名も含めて抽出してください。
+3. 相手方に代理人（弁護士）がいる場合、その情報も抽出してください。
+4. 連絡手段（channel）は、書類の形式や内容から推定してください（例：Web会議の議事録→「Web会議」、電話メモ→「電話」、メール→「メール」）。
+5. 案件種別のサブカテゴリは具体的に記載してください（例：一般→名誉毀損、離婚→養育費、交通事故→後遺障害等級）。
+
+■ 抽出フィールド（値が読み取れない場合は空文字""）:
+{
+  "contact_type": "案件種別（一般/交通事故/離婚/相続/債務整理/労働/不動産/債権回収/刑事/企業法務/障害年金/トレント のいずれか。BitTorrent関連の著作権侵害案件は必ず「トレント」を選択）",
+  "sub_contact_type": "サブカテゴリ（例：名誉毀損、養育費、後遺障害等級、過払い金等、具体的に。ただしcontact_typeが「トレント」の場合は空文字にする）",
+  "contact_at": "問い合わせ日時（ISO 8601形式、例：2026-03-11T13:00:00+09:00）",
+  "company_name": "依頼者（当事者）の法人名",
+  "company_name_kana": "法人名カナ",
+  "family_name": "依頼者（当事者）の姓",
+  "first_name": "依頼者（当事者）の名",
+  "family_name_kana": "姓カナ",
+  "first_name_kana": "名カナ",
+  "phone1": "電話番号1",
+  "phone2": "電話番号2",
+  "mail": "メールアドレス",
+  "address_postcode": "郵便番号",
+  "address_prefecture": "都道府県",
+  "address_city": "市区町村以降の住所",
+  "address_building": "建物名・部屋番号",
+  "gender": "性別（male/female/空文字）",
+  "age": "年齢（数値または空文字。身分証明書・マイナンバーカード・運転免許証等に生年月日が記載されている場合は、そこから現在日時点の年齢を算出すること）",
+  "opponent_company_name": "相手方の法人名",
+  "opponent_company_name_kana": "相手方の法人名カナ",
+  "opponent_family_name": "相手方の姓（本名不明の場合はハンドルネームや通称を入れる）",
+  "opponent_first_name": "相手方の名",
+  "opponent_family_name_kana": "相手方の姓カナ",
+  "opponent_first_name_kana": "相手方の名カナ",
+  "opponent_name_confirm": "相手方の名前に関する特記（例：ハンドルネームのみ判明、通称等）",
+  "opponent_attorney_name": "相手方代理人の弁護士名（該当がある場合）",
+  "opponent_attorney_firm": "相手方代理人の法律事務所名（該当がある場合）",
+  "visitor_family_name": "相談者の姓（当事者本人が相談者の場合は必ず空文字。家族等の代理相談の場合のみ記載）",
+  "visitor_first_name": "相談者の名（当事者本人が相談者の場合は必ず空文字。家族等の代理相談の場合のみ記載）",
+  "visitor_target_relation": "相談者と当事者の関係（例：父、母、配偶者、子、友人等）。重要：当事者本人が相談している場合は必ず空文字にすること。「本人」と入れてはいけない。visitor_target_relationに値を入れるのは、相談者と当事者が別人の場合のみ",
+  "visitor_phone1": "相談者の電話番号（当事者本人が相談者の場合は必ず空文字）",
+  "visitor_mail": "相談者のメール（当事者本人が相談者の場合は必ず空文字）",
+  "content": "問い合わせ・相談内容の要約（300〜500字程度。主訴、経緯、希望する対応を含める。簡潔だが重要事実は省略しない）",
+  "memo": "詳細な相談メモ（以下の構成で、該当する項目をすべて記載すること）：\n【事案の経緯】時系列で事実関係を整理\n【決定事項】面談・相談で決まったこと（方針、受任の可否、次のステップ等）\n【費用・金額】着手金・報酬・実費見込み・相手方への請求額・和解金額・慰謝料・養育費・財産分与額・損害賠償額等、金銭に関する情報はすべて記載\n【今後の対応】次にやるべきこと・宿題・期限\n【重要事実】争点になりうる事実、証拠の有無、相手方の態度・主張\n【特記事項】相手方代理人情報、依頼者の要望・懸念、連絡上の注意等\n※議事録・面談記録・文字起こしの場合は特に詳細に記載し、決定事項と金額情報は絶対に漏らさないこと",
+  "form_type": "相談の種別（電話相談/来所相談/メール相談/Web会議/LINE相談 等）",
+  "channel": "連絡手段（電話/メール/来所/Web会議/LINE 等。書類の種類から推定）",
+  "new_customer": "新規かどうか（true/false/空文字。判断できない場合は空文字）",
+  "trigger_inquiry": "問い合わせの契機（文字列の配列。例：[\"ホームページ\", \"紹介\"]）",
+  "media": "広告媒体（例：アシロ、弁護士ドットコム、ホームページ等）",
+  "has_competitor": "他弁護士への相談歴（あり/なし/空文字）",
+  "callback_time": "折返希望時間帯",
+  "phone_attention": "連絡時の注意事項",
+  "client_channel": "希望の連絡方法（文字列の配列。例：[\"電話\", \"メール\"]）",
+  "divorce_info_procedure_status": "離婚案件の手続き状況（該当する場合のみ。協議中/調停前/調停中/訴訟前/訴訟中 等）",
+  "divorce_info_consultation_type": "離婚案件の相談種別（該当する場合のみ。離婚/養育費/財産分与/慰謝料 等）",
+  "disability_disease_name": "障害名/病名（障害年金案件の場合のみ）",
+  "extracted_text": "ドキュメントから読み取った全テキスト（OCR結果。原文をそのまま記載）"
+}
+
+■ 注意:
+- JSONのみを返してください（マークダウンのコードブロック記号は不要です）
+- 値が読み取れない場合は空文字""にしてください
+- 日本語の書類を想定しています
+- 手書きの場合も最善を尽くして読み取ってください
+- 相手方代理人情報がある場合、memoフィールドに「【相手方代理人】弁護士名（事務所名）」の形式で含めてください
+- 相手方の氏名が不明でハンドルネーム等しかわからない場合、opponent_family_nameにその名称を入れ、opponent_name_confirmに「ハンドルネームのみ判明」等と記載してください
+
+■ memo（相談メモ）の記載について特に重要な指示:
+- 議事録・面談メモ・文字起こし等の場合、memoフィールドには可能な限り詳細に記載してください
+- 金額に関する情報（着手金、報酬金、慰謝料、養育費、財産分与、損害賠償、和解金、示談金、請求額、債務額、賃料、売買代金等）は一つも漏らさず記載してください
+- 面談や相談の中で決まったこと（受任の可否、方針、次回予定、宿題等）は必ず【決定事項】としてまとめてください
+- 依頼者が述べた希望・要望・懸念事項も記載してください
+- 時系列が重要な事案では、【事案の経緯】で日付順に整理してください
+- memoは長くなっても構いません。情報の漏れがないことを最優先してください`;
+
+    const requestBody = {
+      contents: [{
+        parts: [
+          { text: prompt },
+          ...fileParts
+        ]
+      }],
+      generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens: 16384
+      }
+    };
+
+    // 設定チェック
+    if (!settings.geminiKey) {
+      throw new Error('Gemini APIキーが設定されていません。右上の⚙ボタンから設定してください。');
+    }
+    if (!settings.geminiModel) {
+      throw new Error('Geminiモデルが設定されていません。右上の⚙ボタンから設定してください。');
+    }
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${settings.geminiModel}:generateContent?key=${settings.geminiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
+      }
+    );
+
+    if (!response.ok) {
+      const errText = await response.text();
+      if (response.status === 400) {
+        throw new Error(`APIリクエストエラー: APIキーまたはモデル名が正しいか確認してください。\n${errText}`);
+      } else if (response.status === 403) {
+        throw new Error(`API認証エラー: APIキーが無効か、このモデルへのアクセス権がありません。\n${errText}`);
+      }
+      throw new Error(`API Error (${response.status}): ${errText}`);
+    }
+
+    const data = await response.json();
+
+    // Safety block check
+    if (data.candidates?.[0]?.finishReason === 'SAFETY') {
+      throw new Error('AIがコンテンツの安全性ブロックにより応答を生成できませんでした。別のドキュメントでお試しください。');
+    }
+
+    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+    if (!rawText) {
+      const blockReason = data.promptFeedback?.blockReason || '';
+      const finishReason = data.candidates?.[0]?.finishReason || '';
+      throw new Error(`AIから空のレスポンスが返されました。${blockReason ? 'ブロック理由: ' + blockReason : ''}${finishReason ? ' 終了理由: ' + finishReason : ''}\n\nレスポンス全体: ${JSON.stringify(data).substring(0, 500)}`);
+    }
+
+    document.getElementById('aiRawResponse').textContent = rawText;
+
+    // Parse JSON from response
+    let jsonStr = rawText;
+
+    // Remove markdown code block markers (handle both complete and truncated)
+    // First try complete ```json ... ```
+    const jsonMatchComplete = rawText.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (jsonMatchComplete) {
+      jsonStr = jsonMatchComplete[1];
+    } else {
+      // Handle truncated response: remove opening ```json without closing ```
+      jsonStr = jsonStr.replace(/^```(?:json)?\s*/, '');
+      jsonStr = jsonStr.replace(/```\s*$/, '');
+    }
+    jsonStr = jsonStr.trim();
+
+    // Try parsing JSON, with truncation repair
+    function tryParseJSON(str) {
+      try {
+        return JSON.parse(str);
+      } catch (e) {
+        return null;
+      }
+    }
+
+    aiAnalysisResult = tryParseJSON(jsonStr);
+
+    if (!aiAnalysisResult) {
+      // Extract from first { to last }
+      const objMatch = jsonStr.match(/\{[\s\S]*\}/);
+      if (objMatch) {
+        aiAnalysisResult = tryParseJSON(objMatch[0]);
+      }
+    }
+
+    if (!aiAnalysisResult) {
+      // JSON may be truncated (maxOutputTokens reached) - try to repair
+      let repairable = jsonStr;
+      // Find the first {
+      const braceStart = repairable.indexOf('{');
+      if (braceStart >= 0) {
+        repairable = repairable.substring(braceStart);
+        // Remove trailing incomplete key-value (after last comma or colon)
+        repairable = repairable.replace(/,\s*"[^"]*"?\s*:?\s*"?[^"]*$/, '');
+        repairable = repairable.replace(/,\s*"[^"]*$/, '');
+        repairable = repairable.replace(/,\s*$/, '');
+        // Count unmatched braces/brackets and close them
+        let braces = 0, brackets = 0, inStr = false, escape = false;
+        for (const ch of repairable) {
+          if (escape) { escape = false; continue; }
+          if (ch === '\\') { escape = true; continue; }
+          if (ch === '"') { inStr = !inStr; continue; }
+          if (inStr) continue;
+          if (ch === '{') braces++;
+          if (ch === '}') braces--;
+          if (ch === '[') brackets++;
+          if (ch === ']') brackets--;
+        }
+        // Close unclosed string
+        if (inStr) repairable += '"';
+        while (brackets > 0) { repairable += ']'; brackets--; }
+        while (braces > 0) { repairable += '}'; braces--; }
+        aiAnalysisResult = tryParseJSON(repairable);
+      }
+    }
+
+    if (!aiAnalysisResult) {
+      throw new Error('AIレスポンスからJSONを解析できませんでした。レスポンスが途中で切れている可能性があります。\n\nレスポンス冒頭: ' + rawText.substring(0, 300));
+    }
+
+    // Fill extracted text
+    const extractedText = aiAnalysisResult.extracted_text || '(テキスト抽出結果なし)';
+    document.getElementById('extractedText').textContent = extractedText;
+    textSection.classList.remove('hidden');
+
+    // Fill form
+    fillFormFromAI(aiAnalysisResult);
+
+    statusEl.innerHTML = '<div class="status-bar success">&#10004; AI分析が完了しました。内容を確認して次に進んでください。</div>';
+    document.getElementById('toFormBtn').disabled = false;
+
+  } catch (err) {
+    console.error(err);
+    statusEl.innerHTML = `<div class="status-bar error">&#9888; エラー: ${err.message}</div>`;
+    // Still allow proceeding to manual input
+    document.getElementById('toFormBtn').disabled = false;
+  }
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result.split(',')[1];
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function fillFormFromAI(data) {
+  const fieldMap = {
+    contact_type: 'f_contact_type',
+    sub_contact_type: 'f_sub_contact_type',
+    form_type: 'f_form_type',
+    channel: 'f_channel',
+    media: 'f_media',
+    company_name: 'f_company_name',
+    company_name_kana: 'f_company_name_kana',
+    family_name: 'f_family_name',
+    first_name: 'f_first_name',
+    family_name_kana: 'f_family_name_kana',
+    first_name_kana: 'f_first_name_kana',
+    phone1: 'f_phone1',
+    phone2: 'f_phone2',
+    mail: 'f_mail',
+    address_postcode: 'f_address_postcode',
+    address_prefecture: 'f_address_prefecture',
+    address_city: 'f_address_city',
+    address_building: 'f_address_building',
+    gender: 'f_gender',
+    age: 'f_age',
+    name_confirm: 'f_name_confirm',
+    opponent_company_name: 'f_opponent_company_name',
+    opponent_company_name_kana: 'f_opponent_company_name_kana',
+    opponent_family_name: 'f_opponent_family_name',
+    opponent_first_name: 'f_opponent_first_name',
+    opponent_family_name_kana: 'f_opponent_family_name_kana',
+    opponent_first_name_kana: 'f_opponent_first_name_kana',
+    opponent_name_confirm: 'f_opponent_name_confirm',
+    opponent_attorney_name: 'f_opponent_attorney_name',
+    opponent_attorney_firm: 'f_opponent_attorney_firm',
+    visitor_company_name: 'f_visitor_company_name',
+    visitor_family_name: 'f_visitor_family_name',
+    visitor_first_name: 'f_visitor_first_name',
+    visitor_family_name_kana: 'f_visitor_family_name_kana',
+    visitor_first_name_kana: 'f_visitor_first_name_kana',
+    visitor_target_relation: 'f_visitor_target_relation',
+    visitor_phone1: 'f_visitor_phone1',
+    visitor_mail: 'f_visitor_mail',
+    content: 'f_content',
+    memo: 'f_memo',
+    responded_explanation: 'f_responded_explanation',
+    trigger_inquiry: 'f_trigger_inquiry',
+    person_in_charge: 'f_person_in_charge',
+    group_name: 'f_group_name',
+    has_competitor: 'f_has_competitor',
+    callback_time: 'f_callback_time',
+    phone_attention: 'f_phone_attention',
+    client_channel: 'f_client_channel',
+    media: 'f_media',
+    divorce_info_procedure_status: 'f_divorce_info_procedure_status',
+    divorce_info_consultation_type: 'f_divorce_info_consultation_type',
+    disability_disease_name: 'f_disability_disease_name'
+  };
+
+  for (const [key, elementId] of Object.entries(fieldMap)) {
+    const el = document.getElementById(elementId);
+    let val = data[key];
+    if (el && val != null && val !== '') {
+      if ((key === 'trigger_inquiry' || key === 'client_channel') && Array.isArray(val)) {
+        val = val.join(', ');
+      }
+      el.value = String(val);
+      if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+        el.classList.add('ai-filled');
+      }
+    }
+  }
+
+  // Handle contact_at specially
+  if (data.contact_at) {
+    try {
+      const d = new Date(data.contact_at);
+      if (!isNaN(d.getTime())) {
+        const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+        document.getElementById('f_contact_at').value = local;
+        document.getElementById('f_contact_at').classList.add('ai-filled');
+      }
+    } catch(e) {}
+  }
+
+  // Handle new_customer
+  if (data.new_customer === true || data.new_customer === 'true') {
+    document.getElementById('f_new_customer').value = 'true';
+  } else if (data.new_customer === false || data.new_customer === 'false') {
+    document.getElementById('f_new_customer').value = 'false';
+  }
+
+  // Auto-open sections with data
+  const visitorFields = ['visitor_company_name','visitor_family_name','visitor_first_name','visitor_phone1','visitor_mail','visitor_target_relation'];
+  if (visitorFields.some(k => data[k])) {
+    document.getElementById('visitorSection').classList.remove('collapsed');
+    document.getElementById('visitorSectionToggle').classList.add('open');
+  }
+  const opponentFields = ['opponent_company_name','opponent_family_name','opponent_first_name','opponent_attorney_name','opponent_attorney_firm'];
+  if (opponentFields.some(k => data[k])) {
+    document.getElementById('opponentSection').classList.remove('collapsed');
+    document.getElementById('opponentSectionToggle').classList.add('open');
+  }
+  if (data.contact_type === '離婚' || data.divorce_info_procedure_status || data.divorce_info_consultation_type) {
+    document.getElementById('divorceSection').classList.remove('collapsed');
+    document.getElementById('divorceSectionToggle').classList.add('open');
+  }
+}
+
+// ============================================================
+// Build payload
+// ============================================================
+function buildPayload() {
+  const payload = {};
+
+  function addIfNotEmpty(key, value) {
+    if (value != null && value !== '') payload[key] = value;
+  }
+
+  addIfNotEmpty('contact_type', document.getElementById('f_contact_type').value);
+  addIfNotEmpty('sub_contact_type', document.getElementById('f_sub_contact_type').value);
+  addIfNotEmpty('form_type', document.getElementById('f_form_type').value);
+  addIfNotEmpty('channel', document.getElementById('f_channel').value);
+  addIfNotEmpty('media', document.getElementById('f_media').value);
+  addIfNotEmpty('media_addition', document.getElementById('f_media_addition').value);
+
+  const contactAt = document.getElementById('f_contact_at').value;
+  if (contactAt) addIfNotEmpty('contact_at', new Date(contactAt).toISOString());
+
+  const newCust = document.getElementById('f_new_customer').value;
+  if (newCust) payload.new_customer = newCust === 'true';
+
+  // Client
+  addIfNotEmpty('company_name', document.getElementById('f_company_name').value);
+  addIfNotEmpty('company_name_kana', document.getElementById('f_company_name_kana').value);
+  addIfNotEmpty('family_name', document.getElementById('f_family_name').value);
+  addIfNotEmpty('first_name', document.getElementById('f_first_name').value);
+  addIfNotEmpty('family_name_kana', document.getElementById('f_family_name_kana').value);
+  addIfNotEmpty('first_name_kana', document.getElementById('f_first_name_kana').value);
+  addIfNotEmpty('name_confirm', document.getElementById('f_name_confirm').value);
+
+  const phone1 = document.getElementById('f_phone1').value;
+  const phone2 = document.getElementById('f_phone2').value;
+  if (phone1 || phone2) {
+    payload.phone = [];
+    if (phone1) payload.phone.push({ number: phone1 });
+    if (phone2) payload.phone.push({ number: phone2 });
+  }
+
+  addIfNotEmpty('mail', document.getElementById('f_mail').value);
+
+  const postcode = document.getElementById('f_address_postcode').value;
+  const pref = document.getElementById('f_address_prefecture').value;
+  const city = document.getElementById('f_address_city').value;
+  const building = document.getElementById('f_address_building').value;
+  if (postcode || pref || city || building) {
+    payload.address = [{}];
+    if (postcode) payload.address[0].postcode = postcode;
+    if (pref) payload.address[0].prefecture = pref;
+    if (city) payload.address[0].city = city;
+    if (building) payload.address[0].building = building;
+  }
+
+  addIfNotEmpty('gender', document.getElementById('f_gender').value);
+  const age = document.getElementById('f_age').value;
+  if (age) payload.age = parseInt(age);
+
+  // Visitor（visitor_target_relationが空 or 「本人」の場合はvisitor系を送信しない）
+  const vRelation = document.getElementById('f_visitor_target_relation').value.trim();
+  const isVisitorSameAsPerson = !vRelation || vRelation === '本人';
+  if (!isVisitorSameAsPerson) {
+    addIfNotEmpty('visitor_company_name', document.getElementById('f_visitor_company_name').value);
+    addIfNotEmpty('visitor_company_name_kana', document.getElementById('f_visitor_company_name_kana').value);
+    addIfNotEmpty('visitor_family_name', document.getElementById('f_visitor_family_name').value);
+    addIfNotEmpty('visitor_first_name', document.getElementById('f_visitor_first_name').value);
+    addIfNotEmpty('visitor_family_name_kana', document.getElementById('f_visitor_family_name_kana').value);
+    addIfNotEmpty('visitor_first_name_kana', document.getElementById('f_visitor_first_name_kana').value);
+    addIfNotEmpty('visitor_name_confirm', document.getElementById('f_visitor_name_confirm').value);
+    addIfNotEmpty('visitor_target_relation', vRelation);
+  }
+
+  if (!isVisitorSameAsPerson) {
+    const vPhone = document.getElementById('f_visitor_phone1').value;
+    if (vPhone) payload.visitor_phone = [{ number: vPhone }];
+    addIfNotEmpty('visitor_mail', document.getElementById('f_visitor_mail').value);
+  }
+
+  const vPostcode = document.getElementById('f_visitor_address_postcode').value;
+  const vPref = document.getElementById('f_visitor_address_prefecture').value;
+  const vCity = document.getElementById('f_visitor_address_city').value;
+  const vBuilding = document.getElementById('f_visitor_address_building').value;
+  if (!isVisitorSameAsPerson && (vPostcode || vPref || vCity || vBuilding)) {
+    payload.visitor_address = [{}];
+    if (vPostcode) payload.visitor_address[0].postcode = vPostcode;
+    if (vPref) payload.visitor_address[0].prefecture = vPref;
+    if (vCity) payload.visitor_address[0].city = vCity;
+    if (vBuilding) payload.visitor_address[0].building = vBuilding;
+  }
+
+  addIfNotEmpty('visitor_gender', document.getElementById('f_visitor_gender').value);
+  const vAge = document.getElementById('f_visitor_age').value;
+  if (vAge) payload.visitor_age = parseInt(vAge);
+  addIfNotEmpty('visitor_client_channel', document.getElementById('f_client_channel').value);
+
+  // Opponent
+  addIfNotEmpty('opponent_company_name', document.getElementById('f_opponent_company_name').value);
+  addIfNotEmpty('opponent_company_name_kana', document.getElementById('f_opponent_company_name_kana').value);
+  addIfNotEmpty('opponent_family_name', document.getElementById('f_opponent_family_name').value);
+  addIfNotEmpty('opponent_first_name', document.getElementById('f_opponent_first_name').value);
+  addIfNotEmpty('opponent_family_name_kana', document.getElementById('f_opponent_family_name_kana').value);
+  addIfNotEmpty('opponent_first_name_kana', document.getElementById('f_opponent_first_name_kana').value);
+  addIfNotEmpty('opponent_name_confirm', document.getElementById('f_opponent_name_confirm').value);
+
+  // Content
+  addIfNotEmpty('content', document.getElementById('f_content').value);
+
+  // Build memo with opponent attorney info
+  let memoText = document.getElementById('f_memo').value || '';
+  const oppAttorneyName = document.getElementById('f_opponent_attorney_name').value;
+  const oppAttorneyFirm = document.getElementById('f_opponent_attorney_firm').value;
+  if (oppAttorneyName || oppAttorneyFirm) {
+    const attorneyLine = '【相手方代理人】' +
+      (oppAttorneyName ? '弁護士' + oppAttorneyName : '') +
+      (oppAttorneyFirm ? '（' + oppAttorneyFirm + '）' : '');
+    if (memoText && !memoText.includes('相手方代理人')) {
+      memoText = attorneyLine + '\n' + memoText;
+    } else if (!memoText) {
+      memoText = attorneyLine;
+    }
+  }
+  addIfNotEmpty('memo', memoText);
+  addIfNotEmpty('responded_explanation', document.getElementById('f_responded_explanation').value);
+
+  const triggerInquiry = document.getElementById('f_trigger_inquiry').value;
+  if (triggerInquiry) {
+    payload.trigger_inquiry = triggerInquiry.split(/[,、]/).map(s => s.trim()).filter(Boolean);
+  }
+
+  addIfNotEmpty('person_in_charge', document.getElementById('f_person_in_charge').value);
+  addIfNotEmpty('group_name', document.getElementById('f_group_name').value);
+  addIfNotEmpty('has_competitor', document.getElementById('f_has_competitor').value);
+  addIfNotEmpty('callback_time', document.getElementById('f_callback_time').value);
+  addIfNotEmpty('phone_attention', document.getElementById('f_phone_attention').value);
+
+  const clientChannel = document.getElementById('f_client_channel').value;
+  if (clientChannel) {
+    payload.client_channel = clientChannel.split(/[,、]/).map(s => s.trim()).filter(Boolean);
+  }
+
+  // Divorce
+  addIfNotEmpty('divorce_info_procedure_status', document.getElementById('f_divorce_info_procedure_status').value);
+  addIfNotEmpty('divorce_info_consultation_type', document.getElementById('f_divorce_info_consultation_type').value);
+  addIfNotEmpty('disability_disease_name', document.getElementById('f_disability_disease_name').value);
+
+  return payload;
+}
+
+// ============================================================
+// Send to Armana
+// ============================================================
+async function sendToArmana() {
+  const settings = loadSettings();
+  if (!settings.webhookUrl) {
+    alert('設定画面でArmana Webhook URLを入力してください。');
+    openSettings();
+    return;
+  }
+
+  const payload = buildPayload();
+  const sendBtn = document.getElementById('sendBtn');
+  const statusEl = document.getElementById('sendStatus');
+  statusEl.classList.remove('hidden');
+  sendBtn.disabled = true;
+  statusEl.innerHTML = '<div class="status-bar info"><div class="spinner"></div>Armanaに送信中...</div>';
+
+  try {
+    const response = await fetch(settings.webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (response.ok) {
+      let resultText = '';
+      try { resultText = await response.text(); } catch(e) {}
+      saveToHistory(payload);
+      statusEl.innerHTML = `<div class="status-bar success">&#10004; Armanaへの登録が完了しました。${resultText ? '<br><small>' + resultText + '</small>' : ''}</div>`;
+    } else {
+      const errText = await response.text();
+      statusEl.innerHTML = `<div class="status-bar error">&#9888; 送信エラー (${response.status}): ${errText}</div>`;
+      sendBtn.disabled = false;
+    }
+  } catch (err) {
+    statusEl.innerHTML = `<div class="status-bar error">&#9888; 通信エラー: ${err.message}<br><small>CORSエラーの場合は、サーバー側の設定が必要です。</small></div>`;
+    sendBtn.disabled = false;
+  }
+}
+
+// ============================================================
+// UI helpers
+// ============================================================
+function toggleSection(id) {
+  const el = document.getElementById(id);
+  const toggle = document.getElementById(id + 'Toggle');
+  el.classList.toggle('collapsed');
+  toggle.classList.toggle('open');
+}
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  if (tab === 'text') {
+    document.getElementById('tabText').classList.remove('hidden');
+    document.getElementById('tabRaw').classList.add('hidden');
+    document.querySelectorAll('.tab')[0].classList.add('active');
+  } else {
+    document.getElementById('tabText').classList.add('hidden');
+    document.getElementById('tabRaw').classList.remove('hidden');
+    document.querySelectorAll('.tab')[1].classList.add('active');
+  }
+}
+
+function previewJson() {
+  const payload = buildPayload();
+  document.getElementById('jsonModalContent').textContent = JSON.stringify(payload, null, 2);
+  document.getElementById('jsonModal').classList.add('show');
+}
+
+// Remove ai-filled class on edit
+document.addEventListener('input', e => {
+  if (e.target.classList.contains('ai-filled')) {
+    e.target.classList.remove('ai-filled');
+  }
+});
+
+// Close modals on overlay click
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) overlay.classList.remove('show');
+  });
+});
+
+// Initialize default date
+document.getElementById('f_contact_at').value = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+
+// ============================================================
+// Sub-category suggestions
+// ============================================================
+const subCategories = {
+  '一般': ['名誉毀損','誹謗中傷','インターネット','契約トラブル','消費者被害','近隣トラブル','損害賠償','その他'],
+  '交通事故': ['物損','人身','後遺障害等級','死亡事故','自転車事故','ひき逃げ','過失割合'],
+  '離婚': ['離婚協議','養育費','財産分与','慰謝料','婚姻費用','面会交流','親権','不倫慰謝料','DV','モラハラ'],
+  '相続': ['遺産分割','遺言書','遺留分','相続放棄','相続税','成年後見','信託'],
+  '債務整理': ['任意整理','自己破産','個人再生','過払い金','住宅ローン'],
+  '労働': ['不当解雇','残業代','パワハラ','セクハラ','労災','退職勧奨','退職代行'],
+  '不動産': ['売買トラブル','賃貸トラブル','立退き','建築紛争','境界紛争','マンション管理'],
+  '債権回収': ['売掛金','貸金','請負代金','損害賠償','強制執行'],
+  '刑事': ['逮捕・勾留','示談','告訴・告発','痴漢・盗撮','薬物','暴行・傷害','窃盗','詐欺','少年事件'],
+  '企業法務': ['契約書作成','M&A','知的財産','コンプライアンス','労務管理','株主総会'],
+  '障害年金': ['初回申請','不服申立','再請求','額改定']
+};
+
+document.getElementById('f_contact_type').addEventListener('change', function() {
+  const datalist = document.getElementById('subCategoryList');
+  datalist.innerHTML = '';
+  const subs = subCategories[this.value] || [];
+  subs.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s;
+    datalist.appendChild(opt);
+  });
+  // Auto-open divorce section
+  if (this.value === '離婚') {
+    document.getElementById('divorceSection').classList.remove('collapsed');
+    document.getElementById('divorceSectionToggle').classList.add('open');
+  }
+});
+
+// ============================================================
+// Registration history
+// ============================================================
+function saveToHistory(payload) {
+  try {
+    const history = JSON.parse(localStorage.getItem('armana_history') || '[]');
+    history.unshift({
+      timestamp: new Date().toISOString(),
+      contact_type: payload.contact_type || '',
+      sub_contact_type: payload.sub_contact_type || '',
+      client_name: (payload.family_name || '') + (payload.first_name || '') || payload.company_name || '(名前なし)',
+      opponent_name: (payload.opponent_family_name || '') + (payload.opponent_first_name || '') || payload.opponent_company_name || '',
+      summary: (payload.content || '').substring(0, 60)
+    });
+    // Keep last 50
+    if (history.length > 50) history.length = 50;
+    localStorage.setItem('armana_history', JSON.stringify(history));
+  } catch(e) { console.warn('History save failed:', e); }
+}
+
+function showHistory() {
+  const history = JSON.parse(localStorage.getItem('armana_history') || '[]');
+  if (history.length === 0) {
+    alert('登録履歴はまだありません。');
+    return;
+  }
+  const modal = document.getElementById('historyModal');
+  const tbody = document.getElementById('historyTableBody');
+  tbody.innerHTML = history.map(h => {
+    const d = new Date(h.timestamp);
+    const dateStr = d.getFullYear() + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + String(d.getDate()).padStart(2,'0') + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+    return `<tr>
+      <td style="white-space:nowrap">${dateStr}</td>
+      <td>${h.contact_type}${h.sub_contact_type ? '/' + h.sub_contact_type : ''}</td>
+      <td>${h.client_name}</td>
+      <td>${h.opponent_name || '-'}</td>
+      <td style="font-size:12px;color:var(--gray-500)">${h.summary}...</td>
+    </tr>`;
+  }).join('');
+  modal.classList.add('show');
+}
+</script>
+</body>
+</html>
